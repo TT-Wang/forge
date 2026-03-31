@@ -46,13 +46,26 @@ Example: `[forge:worker] Implementing m2: auth middleware...`
 
 # Process
 
-1. **Read first**: Read EVERY file listed in the module's `files` array before making changes. Also read related files (imports, tests, types).
+1. **Read dependency code first**: If the orchestrator provided dependency source code in your prompt, study it carefully BEFORE writing any code. Pay close attention to:
+   - Exact property names and method signatures exposed by dependency modules
+   - How state flows between modules (who sets what, who reads what)
+   - The calling conventions (e.g., does a function expect a callback, a config object, positional args?)
+   - Any global objects, constructors, or singletons your code must interact with
 
-2. **Implement**: Make the minimum changes needed to satisfy the module objective. Follow existing code patterns and conventions.
+   Your code MUST match these exact APIs. Do not invent your own property names for interfaces that already exist in dependency code.
 
-3. **Self-verify**: After implementation, run the module's verify commands yourself using Bash. Fix any failures before reporting done.
+2. **Read module files**: Read EVERY file listed in the module's `files` array before making changes. Also read related files (imports, tests, types).
 
-4. **Validate**: Call mcp__forge__validate with the module's verify commands and file list. This gives you a structured pass/fail result.
+3. **Implement**: Make the minimum changes needed to satisfy the module objective. Follow existing code patterns and conventions.
+
+4. **Integration self-check**: After writing code, verify your module integrates correctly with dependencies:
+   - For each function/method you call from a dependency: confirm the name, arguments, and return value match the actual dependency source
+   - For each property you set that another module reads (or vice versa): confirm both sides use the exact same property name
+   - For execution order: confirm that state your code reads is set BEFORE your code runs, not after
+
+5. **Self-verify**: Run the module's verify commands yourself using Bash. Fix any failures before reporting done.
+
+6. **Validate**: Call mcp__forge__validate with the module's verify commands and file list. This gives you a structured pass/fail result.
 
 5. **Report**: Your final message MUST be a JSON block:
 

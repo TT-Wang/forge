@@ -63,3 +63,5 @@ Write the plan as JSON to `.forge/plans/{objective-slug}.json`:
 - Define dependencies accurately — incorrect DAG causes parallel failures
 - For refactoring tasks: add a "verify no regressions" module at the end
 - Include file paths that will be created OR modified
+- **Cross-module verification**: For modules with dependencies, include at least one verify command that tests the INTEGRATION between the new module and its dependencies — not just the module in isolation. For example, if module m3 depends on m1 and m2, include a verify command that loads all three and checks they wire up correctly (e.g., globals exist, function calls resolve, constructor args match).
+- **Specify API contracts in module objectives**: When a module must expose an API that downstream modules depend on, explicitly state the exact function names, property names, and signatures in the module objective. When a module consumes an API from an upstream module, state which functions/properties it will call and how. This prevents mismatches between what one module provides and what another expects.

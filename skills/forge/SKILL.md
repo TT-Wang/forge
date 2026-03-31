@@ -31,15 +31,32 @@ If the plan has issues, provide feedback and ask the planner to revise.
 Process modules in dependency order. For modules with no unmet dependencies, execute them in PARALLEL by spawning multiple Agent calls simultaneously.
 
 For each module:
-1. Spawn Agent with type `worker`, passing the module spec as prompt
-2. Parse the worker's JSON output
-3. If status is DONE: proceed to validation
-4. If status is BLOCKED: log it, skip to next module, continue
+1. **Gather dependency source code**: Before spawning the worker, read the actual source code of all files produced by completed dependency modules. Include this source code verbatim in the worker prompt under a "## Dependency Source Code" section. This ensures the worker builds against REAL code, not just API specs.
+2. Spawn Agent with type `worker`, passing:
+   - The module spec
+   - The dependency source code (full file contents)
+   - A note: "You MUST match the actual APIs, property names, and calling conventions in the dependency code above. Do not assume — read and conform."
+3. Parse the worker's JSON output
+4. If status is DONE: proceed to review (Phase 2b), then validation
+5. If status is BLOCKED: log it, skip to next module, continue
+
+## Phase 2b: Review (mandatory for all modules)
+After EVERY module completes (not just complex ones):
+1. Spawn Agent with type `reviewer`, passing:
+   - The module spec
+   - The full source code of the module's files AND all dependency files
+   - Instruction: "Focus on API contract mismatches: check that every function call, property access, and event flow between this module and its dependencies matches exactly. Check execution order (who sets vs who reads state). Flag any property/method name that is set in one file but read under a different name in another."
+2. If review finds error-severity issues → send back to worker/debugger for fix BEFORE validation
+3. Warnings are logged but don't block
 
 ## Phase 3: Validate
-After each module completes:
+After each module passes review:
 1. Call mcp__forge__validate with the module's verify commands and files
-2. Check the response:
+2. **Cross-module integration check**: In addition to per-module verify commands, generate and run a lightweight integration check that loads all completed modules' code together and verifies that:
+   - Globals/exports referenced across modules actually exist
+   - Function signatures match between caller and callee
+   - For browser projects: eval all JS files in sequence in Node.js and check globals are defined
+3. Check the response:
    - `passed: true` → module accepted, move on
    - `passed: false, stagnant: false` → retry with debugger (Phase 4)
    - `passed: false, stagnant: true` → escalate to user, skip module
@@ -49,18 +66,13 @@ After each module completes:
 1. Call mcp__forge__iteration_state to get retry history
 2. Spawn Agent with type `debugger`, include:
    - Original module spec
-   - Validation failure output
+   - Validation failure output AND review issues (if any)
+   - The actual source code of dependency files (not just specs)
    - Prior attempt issues from iteration state
 3. After debugger completes, validate again (back to Phase 3)
 4. If 3 attempts exhausted or stagnation detected → skip and report
 
-## Phase 5: Review (optional, for complex modules)
-For modules marked complexity=complex in the plan:
-1. Spawn Agent with type `reviewer`
-2. If review finds error-severity issues, send back to debugger
-3. Warnings are logged but don't block
-
-## Phase 6: Learn
+## Phase 5: Learn
 After all modules complete:
 1. Call mcp__forge__memory_save for each pattern learned:
    - Test commands that worked → category: test_command
