@@ -105,6 +105,58 @@ For quick single-file edits, simple questions, or exploratory work — just use 
 
 Forge is built entirely on Claude Code's native plugin extension points — no patches, no forks, no custom runtime:
 
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  User: /forge "add JWT auth with refresh tokens"                    │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Forge Skill (Orchestrator)                         │
+│                    skills/forge/SKILL.md                              │
+│                                                                      │
+│  Manages the full lifecycle: plan → execute → validate → retry       │
+│  Spawns agents via Claude Code's native Agent tool                   │
+└──────┬──────────┬──────────────┬──────────────┬─────────────────────┘
+       │          │              │              │
+       ▼          ▼              ▼              ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
+│ Planner  │ │ Worker   │ │ Reviewer │ │   Debugger   │
+│          │ │          │ │          │ │              │
+│ Reads    │ │ Edits    │ │ Reviews  │ │ Root-cause   │
+│ codebase,│ │ files,   │ │ for      │ │ analysis on  │
+│ produces │ │ runs in  │ │ bugs &   │ │ failed       │
+│ module   │ │ isolated │ │ security │ │ modules      │
+│ DAG plan │ │ worktree │ │ issues   │ │              │
+└────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
+     │            │             │               │
+     │       ┌────┴─────────────┴───────────────┘
+     │       │  Agents call MCP tools for shared state
+     ▼       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                     MCP Server (Node.js)                             │
+│                     forge-mcp-server/index.mjs                       │
+│                                                                      │
+│  ┌─────────────┐ ┌────────────────┐ ┌─────────────┐ ┌────────────┐ │
+│  │  validate   │ │ memory_recall  │ │ memory_save │ │ iteration  │ │
+│  │             │ │                │ │             │ │ _state     │ │
+│  │ Run verify  │ │ Search past    │ │ Save new    │ │ Track      │ │
+│  │ commands,   │ │ learnings by   │ │ patterns &  │ │ retries &  │ │
+│  │ detect      │ │ keyword        │ │ dedup       │ │ stagnation │ │
+│  │ stagnation  │ │                │ │             │ │            │ │
+│  └──────┬──────┘ └───────┬────────┘ └──────┬──────┘ └─────┬──────┘ │
+└─────────┼────────────────┼─────────────────┼──────────────┼─────────┘
+          ▼                ▼                 ▼              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        .forge/ (persistent state)                    │
+│                                                                      │
+│   plans/*.json       memory/project.jsonl    iterations/m1.json      │
+│   (module DAGs)      memory/global.jsonl     (retry history)         │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+Forge uses these Claude Code extension points:
+
 | Extension Point | What Forge Uses It For |
 |---|---|
 | Custom Agents (.md) | planner, worker, reviewer, debugger agents |
