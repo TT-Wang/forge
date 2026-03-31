@@ -1,6 +1,10 @@
 # Forge
 
-A lightweight workflow framework built on Claude Code. Adds structured planning, parallel execution, automated validation, intelligent retry, and cross-session memory — all through Claude Code's native extension points.
+A [Claude Code](https://claude.com/claude-code) plugin that adds structured planning, parallel execution, automated validation, intelligent retry, and cross-session memory to your workflow.
+
+```bash
+claude plugin add github:TT-Wang/forge
+```
 
 ## What It Does
 
@@ -19,12 +23,11 @@ Forge turns a vague objective into structured, validated, parallel work. Instead
 
 ## What It Is
 
-~565 lines across 9 files. No runtime dependencies beyond Claude Code and one small MCP server.
+A Claude Code plugin — ~565 lines across 9 files. No runtime dependencies beyond Claude Code and one small MCP server. Installs in seconds, works in any project.
 
 - **4 agent definitions** (markdown) — planner, worker, reviewer, debugger
 - **3 skill definitions** (markdown) — /forge, /forge-validate, /forge-status
 - **1 MCP server** (~300 lines Node.js) — validation, memory, iteration tracking
-- **1 rules file** (markdown) — workflow constraints
 
 ## Installation
 
@@ -100,7 +103,7 @@ For quick single-file edits, simple questions, or exploratory work — just use 
 
 ## Architecture
 
-Forge uses only Claude Code's native extension points:
+Forge is built entirely on Claude Code's native plugin extension points — no patches, no forks, no custom runtime:
 
 | Extension Point | What Forge Uses It For |
 |---|---|
