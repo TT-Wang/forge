@@ -28,25 +28,36 @@ Forge turns a vague objective into structured, validated, parallel work. Instead
 
 ## Installation
 
+### As a Plugin (recommended)
+
 ```bash
-# 1. Install MCP server dependencies
-cd forge-mcp-server && npm install && cd ..
-
-# 2. Copy .claude/ directory to your project
-cp -r .claude/ /path/to/your/project/.claude/
-
-# 3. Copy forge-mcp-server/ to your project
-cp -r forge-mcp-server/ /path/to/your/project/forge-mcp-server/
-
-# 4. The .forge/ directory is created automatically on first run
+# Install directly from GitHub
+claude plugin add github:TT-Wang/forge
 ```
 
-Or symlink for shared use across projects:
+That's it. Claude Code will load the agents, skills, and MCP server automatically.
+
+### Manual Installation
+
+If you prefer to copy files into your project:
+
 ```bash
-ln -s /root/forge/.claude/agents/planner.md ~/.claude/agents/planner.md
-ln -s /root/forge/.claude/agents/worker.md ~/.claude/agents/worker.md
-ln -s /root/forge/.claude/agents/reviewer.md ~/.claude/agents/reviewer.md
-ln -s /root/forge/.claude/agents/debugger.md ~/.claude/agents/debugger.md
+# 1. Clone the repo
+git clone https://github.com/TT-Wang/forge.git /tmp/forge
+
+# 2. Copy plugin components to your project's .claude/ directory
+mkdir -p .claude/agents .claude/skills
+cp /tmp/forge/agents/*.md .claude/agents/
+cp -r /tmp/forge/skills/* .claude/skills/
+cp -r /tmp/forge/forge-mcp-server/ ./forge-mcp-server/
+
+# 3. Install MCP server dependencies
+cd forge-mcp-server && npm install && cd ..
+
+# 4. Add the MCP server to your .claude/settings.json
+# (see .claude/settings.json in this repo for the config)
+
+# 5. The .forge/ directory is created automatically on first run
 ```
 
 ## Usage
@@ -99,6 +110,31 @@ Forge uses only Claude Code's native extension points:
 | Hooks (agent frontmatter) | PostToolUse syntax checks on Edit/Write |
 | `isolation: worktree` | Git isolation per worker agent |
 | CLAUDE.md rules | Workflow constraints loaded contextually |
+
+## Project Structure
+
+```
+forge/
+├── .claude-plugin/
+│   └── plugin.json          # Plugin manifest
+├── agents/                   # Agent definitions
+│   ├── planner.md           # Codebase exploration + module decomposition
+│   ├── worker.md            # Implementation with post-edit syntax checks
+│   ├── reviewer.md          # Code review for correctness + security
+│   └── debugger.md          # Root-cause analysis for failed modules
+├── skills/                   # Skill definitions (slash commands)
+│   ├── forge/SKILL.md       # /forge — full orchestrator workflow
+│   ├── forge-validate/SKILL.md  # /forge-validate — validate a module
+│   └── forge-status/SKILL.md    # /forge-status — show plan status
+├── forge-mcp-server/         # MCP server (~300 lines)
+│   ├── index.mjs            # validate, memory, iteration_state tools
+│   └── package.json
+├── .forge/                   # Runtime data (auto-created)
+│   ├── plans/               # Generated execution plans
+│   ├── memory/              # Project and global memory (JSONL)
+│   └── iterations/          # Retry state per module
+└── .claude/settings.json     # MCP config (for manual installs)
+```
 
 ## Design Principles
 

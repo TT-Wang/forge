@@ -31,12 +31,14 @@ The forge MCP server provides:
 - `memory_save` — Save learned patterns
 - `iteration_state` — Track retry attempts per module
 
-## Directory Structure
+## Plugin Structure
+
+This project is a Claude Code plugin. Install with `claude plugin add github:TT-Wang/forge`.
 
 ```
-.forge/
-  plans/        — Generated execution plans (JSON)
-  memory/       — Project and global memory (JSONL)
-  iterations/   — Retry state per module (JSON)
-  forge.json    — Project configuration
+agents/           — Agent definitions (planner, worker, reviewer, debugger)
+skills/           — Skill definitions (/forge, /forge-validate, /forge-status)
+forge-mcp-server/ — MCP server (validate, memory, iteration_state)
+.claude-plugin/   — Plugin manifest (plugin.json)
+.forge/           — Runtime data (plans, memory, iterations)
 ```

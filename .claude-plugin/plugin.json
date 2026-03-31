@@ -1,0 +1,23 @@
+{
+  "name": "forge",
+  "version": "0.1.0",
+  "description": "Structured planning, parallel execution, validation, intelligent retry, and cross-session memory for Claude Code",
+  "author": {
+    "name": "TT-Wang",
+    "url": "https://github.com/TT-Wang"
+  },
+  "repository": "https://github.com/TT-Wang/forge",
+  "license": "MIT",
+  "keywords": ["workflow", "planning", "validation", "retry", "memory", "parallel"],
+  "agents": ["./agents"],
+  "skills": ["./skills"],
+  "mcpServers": {
+    "forge": {
+      "command": "node",
+      "args": ["./forge-mcp-server/index.mjs"],
+      "env": {
+        "FORGE_CWD": "."
+      }
+    }
+  }
+}
