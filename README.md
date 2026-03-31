@@ -2,6 +2,21 @@
 
 A lightweight workflow framework built on Claude Code. Adds structured planning, parallel execution, automated validation, intelligent retry, and cross-session memory — all through Claude Code's native extension points.
 
+## What It Does
+
+Forge turns a vague objective into structured, validated, parallel work. Instead of you manually breaking down tasks, running tests, retrying failures, and remembering patterns — Forge automates that loop.
+
+**Without Forge:** You tell Claude Code what to do, it does it sequentially, you check if it worked, you retry manually if it didn't.
+
+**With Forge:** You say `/forge add JWT auth with refresh tokens` and it:
+1. **Explores** the codebase to understand what exists
+2. **Plans** — breaks the task into a dependency graph of modules (e.g., m1: token generation, m2: middleware, m3: refresh endpoint)
+3. **Executes** workers in parallel in isolated git worktrees — so they can't break each other
+4. **Validates** each module with automated checks (tests, file existence, lint)
+5. **Retries** intelligently — detects stagnation, sends a debugger agent for root-cause analysis
+6. **Reviews** complex modules for correctness and security
+7. **Learns** — saves conventions and failure patterns to memory for next time
+
 ## What It Is
 
 ~565 lines across 9 files. No runtime dependencies beyond Claude Code and one small MCP server.
@@ -46,6 +61,17 @@ ln -s /root/forge/.claude/agents/debugger.md ~/.claude/agents/debugger.md
 # Re-validate a module
 /forge-validate m2
 ```
+
+### When to Use Forge
+
+- **Multi-file features** that touch several parts of the codebase simultaneously
+- **Tasks that need validation** — you want proof it works, not just code that looks right
+- **Ambitious changes** where manual decomposition and sequencing would be tedious
+- **Repeated work across projects** — memory carries forward patterns like "this repo uses vitest not jest"
+
+### When You Don't Need It
+
+For quick single-file edits, simple questions, or exploratory work — just use Claude Code directly. Forge adds structure that's overkill for small tasks.
 
 ## Workflow
 
