@@ -1,0 +1,19 @@
+{
+  "name": "tt-wang-plugins",
+  "owner": {
+    "name": "TT-Wang",
+    "url": "https://github.com/TT-Wang"
+  },
+  "metadata": {
+    "description": "TT-Wang's Claude Code plugins",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "forge",
+      "source": ".",
+      "description": "Structured planning, parallel execution, validation, retry, and memory for Claude Code",
+      "version": "0.1.0"
+    }
+  ]
+}
