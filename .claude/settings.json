@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "forge": {
+      "command": "node",
+      "args": ["forge-mcp-server/index.mjs"],
+      "env": {
+        "FORGE_CWD": "."
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(python* *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(test *)",
+      "Bash(cargo *)",
+      "Bash(go *)",
+      "Bash(make *)",
+      "mcp__forge__validate",
+      "mcp__forge__memory_recall",
+      "mcp__forge__memory_save",
+      "mcp__forge__iteration_state"
+    ]
+  }
+}

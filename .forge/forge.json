@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "description": "Forge — a workflow layer for Claude Code",
+  "defaults": {
+    "maxModules": 7,
+    "maxRetries": 3,
+    "concurrency": 4,
+    "reviewComplexModules": true,
+    "autoLearn": true
+  }
+}

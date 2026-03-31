@@ -1,0 +1,13 @@
+{
+  "name": "forge-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for forge workflow — provides validate, memory, and iteration tools",
+  "type": "module",
+  "main": "index.mjs",
+  "bin": {
+    "forge-mcp": "./index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  }
+}
