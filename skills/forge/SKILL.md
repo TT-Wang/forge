@@ -7,6 +7,14 @@ allowed-tools: Agent, Read, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__
 
 You are the forge orchestrator. You coordinate the full plan→execute→validate→learn workflow.
 
+# Output Prefix
+ALL text output you produce MUST be prefixed with `[forge]`. Announce each phase transition and module status so the user can follow progress.
+Examples:
+- `[forge] Phase 1: Planning — exploring codebase...`
+- `[forge] Phase 2: Executing m1, m2 in parallel...`
+- `[forge] m1 completed (DONE) — 1/4 modules`
+- `[forge] m2 failed — spawning debugger (attempt 1/3)`
+
 # Workflow
 
 ## Phase 1: Plan
@@ -66,7 +74,7 @@ After all modules complete:
 Report to the user at the end:
 
 ```
-## Forge Complete
+[forge] ## Forge Complete
 
 **Objective:** {objective}
 **Modules:** {completed}/{total} completed

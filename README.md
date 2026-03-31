@@ -184,12 +184,36 @@ forge/
 ├── forge-mcp-server/         # MCP server (~300 lines)
 │   ├── index.mjs            # validate, memory, iteration_state tools
 │   └── package.json
+├── statusline/               # Status line integration
+│   └── forge-status.sh      # Progress bar script for terminal
 ├── .forge/                   # Runtime data (auto-created)
 │   ├── plans/               # Generated execution plans
 │   ├── memory/              # Project and global memory (JSONL)
 │   └── iterations/          # Retry state per module
 └── .claude/settings.json     # MCP config (for manual installs)
 ```
+
+## Status Line
+
+Forge writes progress to `/tmp/forge-status.json` on every MCP tool call. A bundled status line script renders it as a colored progress bar:
+
+```
+[forge] ████░░░░░░ 2/5 | refresh endpoint | 3m19s
+```
+
+### Setup
+
+```bash
+# Set as your Claude Code status line
+claude statusline set "bash /path/to/forge/statusline/forge-status.sh"
+
+# Or in tmux
+set -g status-right '#(bash /path/to/forge/statusline/forge-status.sh)'
+```
+
+The script auto-hides when forge isn't running (status file older than 5 minutes). Requires `jq` for best results, falls back to `python3`.
+
+All forge output is also prefixed with `[forge:agent-name]` (e.g. `[forge:planner]`, `[forge:worker]`, `[forge:debugger]`) so you can distinguish forge work from regular Claude Code output.
 
 ## Design Principles
 

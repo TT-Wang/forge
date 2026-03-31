@@ -19,11 +19,16 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  statSync,
+  renameSync,
 } from "fs";
 import { join, resolve } from "path";
 
 const CWD = resolve(process.env.FORGE_CWD || process.cwd());
 const FORGE_DIR = join(CWD, ".forge");
+const PROGRESS_FILE = "/tmp/forge-status.json";
+const PROGRESS_TMP = "/tmp/forge-status.tmp";
+let forgeStartedAt = null;
 
 // Ensure directories
 for (const dir of ["plans", "memory", "iterations"]) {
@@ -184,18 +189,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    let result;
     switch (name) {
       case "validate":
-        return handleValidate(args);
+        result = handleValidate(args);
+        break;
       case "memory_recall":
-        return handleMemoryRecall(args);
+        result = handleMemoryRecall(args);
+        break;
       case "memory_save":
-        return handleMemorySave(args);
+        result = handleMemorySave(args);
+        break;
       case "iteration_state":
-        return handleIterationState(args);
+        result = handleIterationState(args);
+        break;
       default:
         return errorResult(`Unknown tool: ${name}`);
     }
+    try { writeProgressFile(); } catch (_) {}
+    return result;
   } catch (err) {
     return errorResult(`Tool ${name} failed: ${err.message}`);
   }
@@ -453,6 +465,85 @@ function handleIterationState(args) {
   }
 
   return errorResult(`Unknown action: ${action}`);
+}
+
+// ─── Progress file ────────────────────────────────────────────────
+
+function writeProgressFile() {
+  if (!forgeStartedAt) forgeStartedAt = new Date().toISOString();
+
+  // Read latest plan
+  const plansDir = join(FORGE_DIR, "plans");
+  let plan = null;
+  if (existsSync(plansDir)) {
+    const planFiles = readdirSync(plansDir)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => ({
+        name: f,
+        mtime: statSync(join(plansDir, f)).mtimeMs,
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (planFiles.length > 0) {
+      try {
+        plan = JSON.parse(readFileSync(join(plansDir, planFiles[0].name), "utf-8"));
+      } catch (_) {}
+    }
+  }
+
+  // Read iteration states
+  const iterDir = join(FORGE_DIR, "iterations");
+  const iterations = {};
+  if (existsSync(iterDir)) {
+    for (const f of readdirSync(iterDir).filter((f) => f.endsWith(".json"))) {
+      try {
+        const id = f.replace(".json", "");
+        iterations[id] = JSON.parse(readFileSync(join(iterDir, f), "utf-8"));
+      } catch (_) {}
+    }
+  }
+
+  // Build module status map
+  const modules = {};
+  const planModules = plan?.modules || [];
+  for (const m of planModules) {
+    const iter = iterations[m.id];
+    let status = "pending";
+    if (iter) {
+      if (iter.lastStatus) status = iter.lastStatus;
+      else if (iter.attempts.length > 0) {
+        const last = iter.attempts[iter.attempts.length - 1];
+        status = last.score === 1 ? "passed" : "running";
+      }
+    }
+    modules[m.id] = {
+      title: m.title || m.id,
+      status,
+      attempts: iter?.attempts?.length || 0,
+      score: iter?.scores?.length > 0 ? iter.scores[iter.scores.length - 1] : null,
+    };
+  }
+
+  const completed = Object.values(modules).filter((m) => m.status === "passed").length;
+  const running = Object.values(modules).filter((m) => m.status === "running").length;
+  const failed = Object.values(modules).filter((m) =>
+    ["failed", "stagnant", "escalated", "blocked"].includes(m.status)
+  ).length;
+  const total = planModules.length || Object.keys(iterations).length || 0;
+
+  const progress = {
+    timestamp: new Date().toISOString(),
+    startedAt: forgeStartedAt,
+    plan: plan?.objective || "unknown",
+    totalModules: total,
+    modules,
+    completed,
+    running,
+    failed,
+    pending: total - completed - running - failed,
+  };
+
+  writeFileSync(PROGRESS_TMP, JSON.stringify(progress, null, 2));
+  renameSync(PROGRESS_TMP, PROGRESS_FILE);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────

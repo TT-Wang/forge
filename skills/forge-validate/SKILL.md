@@ -5,7 +5,7 @@ argument-hint: <module-id>
 allowed-tools: Read, Bash, mcp__forge__validate, mcp__forge__iteration_state
 ---
 
-Validate a specific module from the active forge plan.
+Validate a specific module from the active forge plan. Prefix all output with `[forge:validate]`.
 
 1. Read the latest plan from `.forge/plans/` (most recent JSON file)
 2. Find the module matching the argument (e.g., "m1", "m2")
