@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "forge",
-      "source": ".",
+      "source": { "source": "github", "repo": "TT-Wang/forge" },
       "description": "Structured planning, parallel execution, validation, retry, and memory for Claude Code",
       "version": "0.1.0"
     }
