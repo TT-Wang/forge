@@ -9,8 +9,6 @@
   "repository": "https://github.com/TT-Wang/forge",
   "license": "MIT",
   "keywords": ["workflow", "planning", "validation", "retry", "memory", "parallel"],
-  "agents": ["./agents"],
-  "skills": ["./skills"],
   "mcpServers": {
     "forge": {
       "command": "node",
