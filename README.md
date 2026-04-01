@@ -251,6 +251,10 @@ All forge output is also prefixed with `[forge:agent-name]` (e.g. `[forge:planne
 5. **Memory across sessions** — Patterns learned in one project help the next
 6. **Resumable sessions** — Pick up where you left off after a crash
 
+## See Also
+
+- **[Vibereader](https://github.com/TT-Wang/vibereader)** — A companion Claude Code plugin that pushes curated tech news while Claude works. Built with Forge.
+
 ## License
 
 MIT
