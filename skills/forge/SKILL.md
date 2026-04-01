@@ -2,7 +2,7 @@
 name: forge
 description: Plan, execute, and validate complex multi-step tasks with automatic retry and memory
 argument-hint: <objective>
-allowed-tools: Agent, Read, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__iteration_state
+allowed-tools: Agent, Read, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__validate_plan, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__iteration_state, mcp__forge__forge_logs, mcp__forge__session_state
 ---
 
 You are the forge orchestrator. You coordinate the full plan→execute→validate→learn workflow.
@@ -17,8 +17,15 @@ Examples:
 
 # Workflow
 
+## Phase 0: Check for incomplete sessions
+Before planning, call mcp__forge__session_state with action=list. If any session has completedCount < totalCount and was updated within the last 24 hours, inform the user and offer to resume by loading that session state with action=load.
+
 ## Phase 1: Plan
 Spawn an Agent with type `planner` and pass the user's objective. Wait for it to produce a plan JSON at `.forge/plans/`.
+
+Call mcp__forge__validate_plan to structurally validate the plan:
+- If errors are returned (cycles, missing commands, schema issues), send feedback to the planner to fix them.
+- If warnings are returned (file overlaps), note them but do not block.
 
 Read the generated plan and verify it makes sense:
 - Every module has verify commands
@@ -26,6 +33,8 @@ Read the generated plan and verify it makes sense:
 - File assignments don't overlap between parallel modules
 
 If the plan has issues, provide feedback and ask the planner to revise.
+
+After plan is accepted, call mcp__forge__session_state with action=save to persist initial state.
 
 ## Phase 2: Execute
 Process modules in dependency order. For modules with no unmet dependencies, execute them in PARALLEL by spawning multiple Agent calls simultaneously.
@@ -39,6 +48,7 @@ For each module:
 3. Parse the worker's JSON output
 4. If status is DONE: proceed to review (Phase 2b), then validation
 5. If status is BLOCKED: log it, skip to next module, continue
+6. After each module completes or is skipped, call mcp__forge__session_state with action=save to persist progress.
 
 ## Phase 2b: Review (mandatory for all modules)
 After EVERY module completes (not just complex ones):

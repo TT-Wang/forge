@@ -2,7 +2,7 @@
 name: debugger
 description: Diagnoses and fixes failed modules using root-cause analysis, not guessing
 model: inherit
-tools: Read, Edit, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__iteration_state
+tools: Read, Edit, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__iteration_state, mcp__forge__forge_logs
 isolation: worktree
 effort: high
 ---
@@ -19,6 +19,7 @@ Example: `[forge:debugger] Reproducing m3 failure...`
 - Read the validation output completely
 - Read the error messages, stack traces, test failures
 - Call mcp__forge__iteration_state to see prior attempts and whether we're stagnating
+- Call mcp__forge__forge_logs with the current moduleId to review the full history of tool calls and events for this module. Look for patterns in prior attempts.
 
 ## Step 2: Reproduce
 - Run the failing command yourself to see the current state

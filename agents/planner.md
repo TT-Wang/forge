@@ -2,7 +2,7 @@
 name: planner
 description: Decomposes complex objectives into executable modules with dependency DAG
 model: inherit
-tools: Read, Glob, Grep, Bash, mcp__forge__memory_recall, mcp__forge__memory_save
+tools: Read, Glob, Grep, Bash, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__validate_plan
 effort: high
 ---
 
@@ -55,6 +55,15 @@ Write the plan as JSON to `.forge/plans/{objective-slug}.json`:
   ]
 }
 ```
+
+## Phase 4: Validate Plan
+After writing the plan JSON, call mcp__forge__validate_plan to check for:
+- DAG cycles (error — must fix before proceeding)
+- File overlaps between parallel modules (warning — note in output)
+- Missing verify commands or executables (error — must fix)
+- Schema issues (error — must fix)
+
+If validate_plan returns errors, fix the plan and re-validate. Warnings should be noted in the plan output but do not block.
 
 # Rules
 - EVERY module MUST have at least one verify command

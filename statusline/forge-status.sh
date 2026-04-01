@@ -36,6 +36,7 @@ if command -v jq &>/dev/null; then
   running=$(jq -r '.running // 0' "$STATUS_FILE")
   failed=$(jq -r '.failed // 0' "$STATUS_FILE")
   started_at=$(jq -r '.startedAt // empty' "$STATUS_FILE")
+  current_phase=$(jq -r '.currentPhase // empty' "$STATUS_FILE")
   running_module=$(jq -r '
     [.modules // {} | to_entries[] | select(.value.status == "running") | .value.title]
     | first // empty
@@ -49,6 +50,7 @@ print(f'completed={d.get(\"completed\", 0)}')
 print(f'running={d.get(\"running\", 0)}')
 print(f'failed={d.get(\"failed\", 0)}')
 print(f'started_at={d.get(\"startedAt\", \"\")}')
+print(f'current_phase={d.get(\"currentPhase\", \"\")}')
 mods = d.get('modules', {})
 rm = [v['title'] for v in mods.values() if v.get('status') == 'running']
 print(f'running_module={rm[0] if rm else \"\"}')
@@ -76,6 +78,7 @@ for ((i=0; i<empty; i++)); do bar+="░"; done
 
 # Elapsed time
 elapsed=""
+secs=0
 if [[ -n "$started_at" ]]; then
   if [[ "$(uname)" == "Darwin" ]]; then
     start_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${started_at%%.*}" +%s 2>/dev/null || echo "")
@@ -91,6 +94,19 @@ if [[ -n "$started_at" ]]; then
   fi
 fi
 
+# ETA estimate — based on average time per completed module
+eta=""
+if (( completed >= 2 && secs > 0 )); then
+  remaining_modules=$(( total - completed ))
+  if (( remaining_modules > 0 )); then
+    avg_secs=$(( secs / completed ))
+    eta_secs=$(( avg_secs * remaining_modules ))
+    eta_mins=$(( eta_secs / 60 ))
+    eta_remaining=$(( eta_secs % 60 ))
+    eta="~${eta_mins}m${eta_remaining}s left"
+  fi
+fi
+
 # Status color for the bar
 if (( failed > 0 )); then
   BAR_COLOR="$RED"
@@ -103,6 +119,11 @@ fi
 # Build output
 output="${BOLD_CYAN}[forge]${RESET} ${BAR_COLOR}${bar}${RESET} ${completed}/${total}"
 
+# Show current phase if available
+if [[ -n "${current_phase:-}" ]]; then
+  output+=" ${GRAY}|${RESET} ${GREEN}${current_phase}${RESET}"
+fi
+
 if [[ -n "$running_module" ]]; then
   output+=" ${GRAY}|${RESET} ${YELLOW}${running_module}${RESET}"
 fi
@@ -113,6 +134,10 @@ fi
 
 if [[ -n "$elapsed" ]]; then
   output+=" ${GRAY}|${RESET} ${elapsed}"
+fi
+
+if [[ -n "$eta" ]]; then
+  output+=" ${GRAY}|${RESET} ${GRAY}${eta}${RESET}"
 fi
 
 echo -e "$output"

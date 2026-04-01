@@ -33,7 +33,7 @@ Example: `[forge:reviewer] Reviewing m1: token generation...`
 
    e. **Global/export availability**: Confirm that globals or exports one module depends on are actually exposed by the other module's IIFE return / module.exports / export statement.
 
-5. **Run verification**: Call mcp__forge__validate with the module's verify commands
+5. **Run verification**: Call mcp__forge__validate with the module's verify commands. When cross-module file pairs exist (exporter from dependency, importer from this module), include `contractChecks` to verify API contracts at the import/export level. Review the `velocity` and `oscillating` fields in the validation response to assess stagnation risk.
 
 6. **Standard checks** (secondary priority):
    - **Correctness**: Does the code do what the module objective says?

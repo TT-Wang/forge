@@ -31,9 +31,12 @@
       "Bash(go *)",
       "Bash(make *)",
       "mcp__forge__validate",
+      "mcp__forge__validate_plan",
       "mcp__forge__memory_recall",
       "mcp__forge__memory_save",
-      "mcp__forge__iteration_state"
+      "mcp__forge__iteration_state",
+      "mcp__forge__forge_logs",
+      "mcp__forge__session_state"
     ]
   }
 }

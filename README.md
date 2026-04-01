@@ -1,6 +1,6 @@
 # Forge
 
-A [Claude Code](https://claude.com/claude-code) plugin that adds structured planning, parallel execution, automated validation, intelligent retry, and cross-session memory to your workflow.
+A [Claude Code](https://claude.com/claude-code) plugin that adds structured planning, parallel execution, deep validation, intelligent retry, session resumability, and cross-session memory to your workflow.
 
 ```bash
 claude plugin add github:TT-Wang/forge
@@ -15,19 +15,21 @@ Forge turns a vague objective into structured, validated, parallel work. Instead
 **With Forge:** You say `/forge add JWT auth with refresh tokens` and it:
 1. **Explores** the codebase to understand what exists
 2. **Plans** — breaks the task into a dependency graph of modules (e.g., m1: token generation, m2: middleware, m3: refresh endpoint)
-3. **Executes** workers in parallel in isolated git worktrees — so they can't break each other
-4. **Validates** each module with automated checks (tests, file existence, lint)
-5. **Retries** intelligently — detects stagnation, sends a debugger agent for root-cause analysis
-6. **Reviews** complex modules for correctness and security
-7. **Learns** — saves conventions and failure patterns to memory for next time
+3. **Validates the plan** — checks for DAG cycles, file overlaps, missing commands
+4. **Executes** workers in parallel in isolated git worktrees — so they can't break each other
+5. **Validates deeply** — syntax checks, API contract verification between modules, stagnation/velocity/oscillation analysis
+6. **Retries** intelligently — detects stagnation, sends a debugger agent for root-cause analysis
+7. **Reviews** modules for correctness and security, using contract checks
+8. **Learns** — saves conventions and failure patterns to memory for next time
+9. **Resumes** — if a session crashes, pick up where you left off
 
 ## What It Is
 
-A Claude Code plugin — ~565 lines across 9 files. No runtime dependencies beyond Claude Code and one small MCP server. Installs in seconds, works in any project.
+A Claude Code plugin — ~900 lines across 9 files. No runtime dependencies beyond Claude Code and one small MCP server. Installs in seconds, works in any project.
 
 - **4 agent definitions** (markdown) — planner, worker, reviewer, debugger
 - **3 skill definitions** (markdown) — /forge, /forge-validate, /forge-status
-- **1 MCP server** (~300 lines Node.js) — validation, memory, iteration tracking
+- **1 MCP server** (~600 lines Node.js) — 7 tools for validation, memory, iteration tracking, logging, and session management
 
 ## Installation
 
@@ -92,13 +94,13 @@ For quick single-file edits, simple questions, or exploratory work — just use 
 ```
 /forge "objective"
   │
-  ├─ Phase 1: UNDERSTAND — explore codebase, load memory
-  ├─ Phase 2: PLAN — decompose into modules with DAG
-  ├─ Phase 3: EXECUTE — parallel workers in git worktrees
-  ├─ Phase 4: VALIDATE — automated checks + stagnation detection
-  ├─ Phase 5: RETRY — debugger agent with root-cause analysis (max 3)
-  ├─ Phase 6: REVIEW — reviewer agent for complex modules
-  └─ Phase 7: LEARN — save patterns to memory for next time
+  ├─ Phase 0: CHECK — look for incomplete sessions to resume
+  ├─ Phase 1: PLAN — decompose into modules, validate plan structure
+  ├─ Phase 2: EXECUTE — parallel workers in git worktrees
+  ├─ Phase 3: VALIDATE — deep checks (syntax, contracts, velocity)
+  ├─ Phase 4: RETRY — debugger agent with root-cause analysis + log inspection
+  ├─ Phase 5: REVIEW — reviewer agent with contract verification
+  └─ Phase 6: LEARN — save patterns to memory for next time
 ```
 
 ## Architecture
@@ -124,10 +126,11 @@ Forge is built entirely on Claude Code's native plugin extension points — no p
 │ Planner  │ │ Worker   │ │ Reviewer │ │   Debugger   │
 │          │ │          │ │          │ │              │
 │ Reads    │ │ Edits    │ │ Reviews  │ │ Root-cause   │
-│ codebase,│ │ files,   │ │ for      │ │ analysis on  │
-│ produces │ │ runs in  │ │ bugs &   │ │ failed       │
-│ module   │ │ isolated │ │ security │ │ modules      │
-│ DAG plan │ │ worktree │ │ issues   │ │              │
+│ codebase,│ │ files,   │ │ for      │ │ analysis +   │
+│ produces │ │ runs in  │ │ bugs,    │ │ log inspect  │
+│ module   │ │ isolated │ │ security │ │ on failed    │
+│ DAG plan,│ │ worktree │ │ + API    │ │ modules      │
+│ validates│ │          │ │ contracts│ │              │
 └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
      │            │             │               │
      │       ┌────┴─────────────┴───────────────┘
@@ -137,21 +140,31 @@ Forge is built entirely on Claude Code's native plugin extension points — no p
 │                     MCP Server (Node.js)                             │
 │                     forge-mcp-server/index.mjs                       │
 │                                                                      │
-│  ┌─────────────┐ ┌────────────────┐ ┌─────────────┐ ┌────────────┐ │
-│  │  validate   │ │ memory_recall  │ │ memory_save │ │ iteration  │ │
-│  │             │ │                │ │             │ │ _state     │ │
-│  │ Run verify  │ │ Search past    │ │ Save new    │ │ Track      │ │
-│  │ commands,   │ │ learnings by   │ │ patterns &  │ │ retries &  │ │
-│  │ detect      │ │ keyword        │ │ dedup       │ │ stagnation │ │
-│  │ stagnation  │ │                │ │             │ │            │ │
-│  └──────┬──────┘ └───────┬────────┘ └──────┬──────┘ └─────┬──────┘ │
-└─────────┼────────────────┼─────────────────┼──────────────┼─────────┘
-          ▼                ▼                 ▼              ▼
+│  ┌───────────┐ ┌──────────────┐ ┌─────────────┐ ┌────────────────┐ │
+│  │ validate  │ │validate_plan │ │ memory_*    │ │ iteration_state│ │
+│  │           │ │              │ │             │ │                │ │
+│  │ Syntax,   │ │ DAG cycles,  │ │ Recall &   │ │ Track retries  │ │
+│  │ contracts,│ │ file overlap,│ │ save        │ │ & stagnation   │ │
+│  │ velocity, │ │ cmd check,  │ │ patterns    │ │                │ │
+│  │ oscillate │ │ schema      │ │             │ │                │ │
+│  └───────────┘ └──────────────┘ └─────────────┘ └────────────────┘ │
+│  ┌───────────┐ ┌──────────────┐                                    │
+│  │forge_logs │ │session_state │                                    │
+│  │           │ │              │                                    │
+│  │ Structured│ │ Save/load/   │                                    │
+│  │ JSONL logs│ │ list session │                                    │
+│  │ per run   │ │ for resume   │                                    │
+│  └───────┬───┘ └──────┬───────┘                                    │
+└──────────┼─────────────┼───────────────────────────────────────────┘
+           ▼             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        .forge/ (persistent state)                    │
 │                                                                      │
-│   plans/*.json       memory/project.jsonl    iterations/m1.json      │
-│   (module DAGs)      memory/global.jsonl     (retry history)         │
+│   plans/*.json       memory/*.jsonl    iterations/m*.json            │
+│   (module DAGs)      (learnings)       (retry history)               │
+│                                                                      │
+│   logs/*.jsonl       state/*.json                                    │
+│   (structured logs)  (session state for resumability)                │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -161,7 +174,7 @@ Forge uses these Claude Code extension points:
 |---|---|
 | Custom Agents (.md) | planner, worker, reviewer, debugger agents |
 | Skills (.md) | /forge, /forge-validate, /forge-status commands |
-| MCP Server | validate, memory, iteration_state tools |
+| MCP Server | validate, validate_plan, memory, iteration_state, forge_logs, session_state |
 | Hooks (agent frontmatter) | PostToolUse syntax checks on Edit/Write |
 | `isolation: worktree` | Git isolation per worker agent |
 | CLAUDE.md rules | Workflow constraints loaded contextually |
@@ -173,32 +186,46 @@ forge/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── agents/                   # Agent definitions
-│   ├── planner.md           # Codebase exploration + module decomposition
+│   ├── planner.md           # Codebase exploration + module decomposition + plan validation
 │   ├── worker.md            # Implementation with post-edit syntax checks
-│   ├── reviewer.md          # Code review for correctness + security
-│   └── debugger.md          # Root-cause analysis for failed modules
+│   ├── reviewer.md          # Code review with API contract verification
+│   └── debugger.md          # Root-cause analysis with structured log inspection
 ├── skills/                   # Skill definitions (slash commands)
-│   ├── forge/SKILL.md       # /forge — full orchestrator workflow
+│   ├── forge/SKILL.md       # /forge — full orchestrator workflow with session resumability
 │   ├── forge-validate/SKILL.md  # /forge-validate — validate a module
 │   └── forge-status/SKILL.md    # /forge-status — show plan status
-├── forge-mcp-server/         # MCP server (~300 lines)
-│   ├── index.mjs            # validate, memory, iteration_state tools
+├── forge-mcp-server/         # MCP server (~600 lines)
+│   ├── index.mjs            # 7 tools: validate, validate_plan, memory, iteration, logs, session
 │   └── package.json
 ├── statusline/               # Status line integration
-│   └── forge-status.sh      # Progress bar script for terminal
+│   └── forge-status.sh      # Progress bar with phase display and ETA
 ├── .forge/                   # Runtime data (auto-created)
 │   ├── plans/               # Generated execution plans
 │   ├── memory/              # Project and global memory (JSONL)
-│   └── iterations/          # Retry state per module
+│   ├── iterations/          # Retry state per module
+│   ├── logs/                # Structured JSONL logs per run
+│   └── state/               # Session state for resumability
 └── .claude/settings.json     # MCP config (for manual installs)
 ```
+
+## MCP Tools
+
+| Tool | Description |
+|---|---|
+| `validate` | File checks, AST syntax validation, cross-module API contract verification, command execution. Returns score, stagnation, velocity, and oscillation analysis. |
+| `validate_plan` | Structural plan validation: DAG cycle detection (topological sort), file overlap warnings, verify command existence checks, module schema validation. |
+| `memory_recall` | Keyword-based search across project and global memory stores. Returns top matches by relevance then confidence. |
+| `memory_save` | Persist learned patterns (conventions, failures, test commands, architecture) with deduplication. |
+| `iteration_state` | Track retry attempts per module: get/update/reset. Records scores, issues, stagnation flags. |
+| `forge_logs` | Query structured JSONL logs. Filter by runId, moduleId, phase, severity. Auto-logs every tool call. |
+| `session_state` | Save/load/list orchestrator state for session resumability. Persists progress across crashes. |
 
 ## Status Line
 
 Forge writes progress to `/tmp/forge-status.json` on every MCP tool call. A bundled status line script renders it as a colored progress bar:
 
 ```
-[forge] ████░░░░░░ 2/5 | refresh endpoint | 3m19s
+[forge] ████░░░░░░ 2/5 | VALIDATE | refresh endpoint | 3m19s | ~2m30s left
 ```
 
 ### Setup
@@ -219,9 +246,10 @@ All forge output is also prefixed with `[forge:agent-name]` (e.g. `[forge:planne
 
 1. **Compose, don't rebuild** — Uses Claude Code's tools, permissions, UI, and agent system
 2. **Markdown over code** — Agents and skills are markdown files, not TypeScript
-3. **Validation is mandatory** — Every module must have verify commands
-4. **Retry with intelligence** — Stagnation detection prevents infinite loops
+3. **Validation is deep** — Syntax checks, API contract verification, velocity tracking
+4. **Retry with intelligence** — Stagnation + oscillation detection prevents infinite loops
 5. **Memory across sessions** — Patterns learned in one project help the next
+6. **Resumable sessions** — Pick up where you left off after a crash
 
 ## License
 
