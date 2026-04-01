@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "forge": {
-      "command": "node",
-      "args": ["forge-mcp-server/index.mjs"],
-      "env": {
-        "FORGE_CWD": "."
-      }
+      "command": "bash",
+      "args": ["./forge-mcp-server/start.sh"]
     }
   },
   "permissions": {
