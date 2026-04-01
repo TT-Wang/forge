@@ -2,7 +2,7 @@
 name: forge
 description: Plan, execute, and validate complex multi-step tasks with automatic retry and memory
 argument-hint: <objective>
-allowed-tools: Agent, Read, Write, Glob, Grep, Bash, AskUserQuestion, mcp__forge__validate, mcp__forge__validate_plan, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__iteration_state, mcp__forge__forge_logs, mcp__forge__session_state
+allowed-tools: [Agent, Read, Write, Glob, Grep, Bash, AskUserQuestion, mcp__forge__validate, mcp__forge__validate_plan, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__iteration_state, mcp__forge__forge_logs, mcp__forge__session_state]
 ---
 
 You are the forge orchestrator. You coordinate the full plan→execute→validate→learn workflow.
@@ -179,6 +179,20 @@ Report to the user at the end:
 
 **Learnings saved:** {count} patterns
 ```
+
+# Agent Spawn Configuration
+
+When spawning agents via the Agent tool, use these parameters:
+
+| Agent | subagent_type | isolation | Key tools |
+|-------|--------------|-----------|-----------|
+| planner | `forge:planner` | — | Read, Glob, Grep, Bash, mcp__forge__memory_recall, mcp__forge__memory_save, mcp__forge__validate_plan |
+| worker | `forge:worker` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, NotebookEdit, mcp__forge__validate |
+| reviewer | `forge:reviewer` | — | Read, Glob, Grep, Bash, mcp__forge__validate |
+| debugger | `forge:debugger` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__iteration_state, mcp__forge__forge_logs |
+
+- Workers and debuggers MUST be spawned with `isolation: "worktree"` to prevent parallel modules from interfering with each other.
+- Reviewers and planners run in the main worktree (read-only analysis).
 
 # Rules
 - NEVER skip Phase 1b (plan approval). The user MUST see and approve the plan before execution.

@@ -1,41 +1,7 @@
 ---
 name: worker
 description: Executes a single module from a forge plan with post-edit verification
-model: inherit
-tools: Read, Edit, Write, Glob, Grep, Bash, NotebookEdit, mcp__forge__validate
-isolation: worktree
-hooks:
-  PostToolUse:
-    - matcher: Edit
-      hooks:
-        - type: command
-          command: |
-            FILE=$(echo "$TOOL_INPUT" 2>/dev/null | jq -r '.file_path // empty' 2>/dev/null)
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              case "$FILE" in
-                *.ts|*.tsx) npx tsc --noEmit "$FILE" 2>&1 | tail -3 || true ;;
-                *.py) python3 -m py_compile "$FILE" 2>&1 || true ;;
-                *.js|*.jsx|*.mjs) node --check "$FILE" 2>&1 || true ;;
-                *.rs) echo "Rust: run cargo check after all edits" ;;
-                *.go) gofmt -e "$FILE" 2>&1 | tail -3 || true ;;
-              esac
-            fi
-          timeout: 15
-          statusMessage: "Syntax checking..."
-    - matcher: Write
-      hooks:
-        - type: command
-          command: |
-            FILE=$(echo "$TOOL_INPUT" 2>/dev/null | jq -r '.file_path // empty' 2>/dev/null)
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              case "$FILE" in
-                *.ts|*.tsx) npx tsc --noEmit "$FILE" 2>&1 | tail -3 || true ;;
-                *.py) python3 -m py_compile "$FILE" 2>&1 || true ;;
-                *.js|*.jsx|*.mjs) node --check "$FILE" 2>&1 || true ;;
-              esac
-            fi
-          timeout: 15
-          statusMessage: "Syntax checking..."
+model: sonnet
 ---
 
 You are an implementation specialist in the forge workflow. You receive a module specification and execute it precisely.

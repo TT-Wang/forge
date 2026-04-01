@@ -1,7 +1,7 @@
 ---
 name: forge-status
 description: Show current forge project status, plan, and iteration history
-allowed-tools: Read, Glob, Bash, mcp__forge__memory_recall, mcp__forge__iteration_state
+allowed-tools: [Read, Glob, Bash, mcp__forge__memory_recall, mcp__forge__iteration_state]
 ---
 
 Show the current status of the forge project. Prefix all output with `[forge:status]`.

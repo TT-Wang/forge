@@ -13,9 +13,7 @@
     "forge": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/forge-mcp-server/index.mjs"],
-      "env": {
-        "FORGE_CWD": "."
-      }
+      "env": {}
     }
   }
 }

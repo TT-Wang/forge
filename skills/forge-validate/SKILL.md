@@ -2,7 +2,7 @@
 name: forge-validate
 description: Run validation on a specific module from the current forge plan
 argument-hint: <module-id>
-allowed-tools: Read, Bash, mcp__forge__validate, mcp__forge__iteration_state
+allowed-tools: [Read, Bash, mcp__forge__validate, mcp__forge__iteration_state]
 ---
 
 Validate a specific module from the active forge plan. Prefix all output with `[forge:validate]`.
