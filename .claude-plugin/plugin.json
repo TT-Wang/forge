@@ -11,8 +11,9 @@
   "keywords": ["workflow", "planning", "validation", "retry", "memory", "parallel"],
   "mcpServers": {
     "forge": {
-      "command": "bash",
-      "args": ["./forge-mcp-server/start.sh"]
+      "command": "node",
+      "args": ["forge-mcp-server/index.mjs"],
+      "cwd": "."
     }
   }
 }
