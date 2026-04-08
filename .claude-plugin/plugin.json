@@ -12,7 +12,7 @@
   "mcpServers": {
     "forge": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/forge-mcp-server/index.mjs"],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/forge-mcp-server/dist/index.mjs"],
       "env": {}
     }
   }
