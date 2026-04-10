@@ -34,16 +34,53 @@ Forge turns a vague objective into structured, validated, parallel work. You say
 ## How it works
 
 ```
-/forge "objective"
-  ├─ PLAN     — decompose into module DAG, validate structure
-  ├─ EXECUTE  — parallel workers in git worktrees
-  ├─ VALIDATE — syntax, contracts, velocity analysis
-  ├─ RETRY    — debugger agent with root-cause analysis
-  ├─ REVIEW   — reviewer agent with contract checks
-  └─ LEARN    — save patterns to memory
+┌─────────────────────────────────────────────────────────────┐
+│  /forge "add JWT auth with refresh tokens"                   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │    Forge Orchestrator   │
+              │    skills/forge/SKILL   │
+              └─────┬──────────────────┘
+                    │
+    ┌───────────────┼───────────────┬───────────────┐
+    ▼               ▼               ▼               ▼
+┌────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│Planner │   │ Worker   │   │ Reviewer │   │ Debugger │
+│        │   │ (×N      │   │          │   │          │
+│ Explore│   │ parallel)│   │ Security │   │ Root     │
+│ codebase   │          │   │ + API    │   │ cause    │
+│ → DAG  │   │ Isolated │   │ contract │   │ analysis │
+│ plan   │   │ worktree │   │ checks   │   │ + logs   │
+└────┬───┘   └────┬─────┘   └────┬─────┘   └────┬─────┘
+     │            │               │               │
+     └────────────┴───────┬───────┴───────────────┘
+                          │
+                          ▼
+              ┌────────────────────────┐
+              │     MCP Server         │
+              │     (Node.js, 7 tools) │
+              │                        │
+              │  validate              │
+              │  validate_plan         │
+              │  memory_recall/save    │
+              │  iteration_state       │
+              │  forge_logs            │
+              │  session_state         │
+              └───────────┬────────────┘
+                          │
+                          ▼
+              ┌────────────────────────┐
+              │   .forge/ (persistent) │
+              │                        │
+              │   plans/    memory/    │
+              │   iterations/  logs/   │
+              │   state/               │
+              └────────────────────────┘
 ```
 
-4 agents (planner, worker, reviewer, debugger) + 1 MCP server (7 tools) + 3 slash commands. All markdown and Node.js — no custom runtime.
+4 agents + 1 MCP server (7 tools) + 3 slash commands. All markdown and Node.js — no custom runtime.
 
 ## MCP Tools
 
