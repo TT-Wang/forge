@@ -2,8 +2,20 @@
 
 A [Claude Code](https://claude.com/claude-code) plugin that adds structured planning, parallel execution, deep validation, intelligent retry, session resumability, and cross-session memory to your workflow.
 
+## Install
+
 ```bash
-claude plugin add github:TT-Wang/forge
+# Add the marketplace
+claude plugin marketplace add TT-Wang/forge
+
+# Install
+claude plugin install forge@tt-wang-plugins
+```
+
+Or from the Claude Code prompt:
+```
+/plugin marketplace add TT-Wang/forge
+/plugin install forge@tt-wang-plugins
 ```
 
 ## What It Does
@@ -33,37 +45,7 @@ A Claude Code plugin — ~900 lines across 9 files. No runtime dependencies beyo
 
 ## Installation
 
-### As a Plugin (recommended)
-
-```bash
-# Install directly from GitHub
-claude plugin add github:TT-Wang/forge
-```
-
-That's it. Claude Code will load the agents, skills, and MCP server automatically.
-
-### Manual Installation
-
-If you prefer to copy files into your project:
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/TT-Wang/forge.git /tmp/forge
-
-# 2. Copy plugin components to your project's .claude/ directory
-mkdir -p .claude/agents .claude/skills
-cp /tmp/forge/agents/*.md .claude/agents/
-cp -r /tmp/forge/skills/* .claude/skills/
-cp -r /tmp/forge/forge-mcp-server/ ./forge-mcp-server/
-
-# 3. Install MCP server dependencies
-cd forge-mcp-server && npm install && cd ..
-
-# 4. Add the MCP server to your .claude/settings.json
-# (see .claude/settings.json in this repo for the config)
-
-# 5. The .forge/ directory is created automatically on first run
-```
+The plugin install command handles everything — agents, skills, and MCP server are loaded automatically.
 
 ## Usage
 
@@ -253,6 +235,7 @@ All forge output is also prefixed with `[forge:agent-name]` (e.g. `[forge:planne
 
 ## See Also
 
+- **[Cortex](https://github.com/TT-Wang/cortex-plugin)** — Persistent cross-session memory for Claude Code. Remembers what worked, what failed, and what your project needs.
 - **[Vibereader](https://github.com/TT-Wang/vibereader)** — A companion Claude Code plugin that pushes curated tech news while Claude works. Built with Forge.
 
 ## License
