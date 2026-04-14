@@ -13,7 +13,7 @@
       "name": "forge",
       "source": "./",
       "description": "Structured planning, parallel execution, validation, retry, and memory for Claude Code",
-      "version": "0.1.0"
+      "version": "0.4.0"
     }
   ]
 }

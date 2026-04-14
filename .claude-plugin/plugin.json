@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Structured planning, parallel execution, validation, intelligent retry, and cross-session memory for Claude Code",
   "author": {
     "name": "TT-Wang",

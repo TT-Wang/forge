@@ -23,7 +23,7 @@ import {
   statSync,
   renameSync,
 } from "fs";
-import { join, resolve, extname } from "path";
+import { join, resolve, extname, dirname } from "path";
 
 const CWD = resolve(process.env.FORGE_CWD || process.cwd());
 const FORGE_DIR = join(CWD, ".forge");
@@ -91,13 +91,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "validate",
       description:
-        "Run verification commands, file-existence checks, syntax validation, and cross-module API contract checks for a forge module. Returns structured pass/fail with stagnation detection, velocity, and oscillation analysis.",
+        "Run verification commands, file-existence checks, syntax validation, and cross-module API contract checks for a forge module. Returns structured pass/fail with stagnation detection, velocity, and oscillation analysis. v0.4.0: accepts optional `cwd` to redirect validation to a worktree, and `runId` to scope iteration state.",
       inputSchema: {
         type: "object",
         properties: {
           moduleId: {
             type: "string",
             description: "Module ID (e.g. m1, m2)",
+          },
+          runId: {
+            type: "string",
+            description:
+              "Optional run ID (plan slug). Scopes iteration state so attempts from different forge runs don't pollute each other. Strongly recommended — without it, attempts accumulate across all runs forever.",
+          },
+          cwd: {
+            type: "string",
+            description:
+              "Optional absolute path to redirect file checks and command execution. Workers running in git worktrees should pass their worktree path here so validation sees their changes. Precedence: args.cwd > FORGE_CWD env > process.cwd(). Must exist when provided — nonexistent paths return a cwd_check failure with recommendation=ESCALATE.",
           },
           commands: {
             type: "array",
@@ -108,7 +118,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "array",
             items: { type: "string" },
             description:
-              "File paths (relative to project root) that should exist after module completion",
+              "File paths (relative to the validation working dir — `cwd` if provided, else server CWD) that should exist after module completion",
           },
           contractChecks: {
             type: "array",
@@ -179,12 +189,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: [
               "convention",
               "failure_pattern",
+              "success_pattern",
               "test_command",
               "architecture",
               "dependency",
               "tool_usage",
             ],
-            description: "Category of the learning",
+            description:
+              "Category of the learning. `success_pattern` is used by orchestrator Phase 5 to record run-shape calibration data (module count, tier depth, total time) for future planning.",
           },
           confidence: {
             type: "number",
@@ -205,13 +217,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "iteration_state",
       description:
-        "Get or update the retry/iteration state for a module. Tracks attempts, scores, and stagnation.",
+        "Get or update the retry/iteration state for a module. Tracks attempts, scores, and stagnation. v0.4.0: accepts optional `runId` to scope state per forge run (strongly recommended — without it, attempts accumulate globally across every run).",
       inputSchema: {
         type: "object",
         properties: {
           moduleId: {
             type: "string",
             description: "Module ID (e.g. m1)",
+          },
+          runId: {
+            type: "string",
+            description:
+              "Optional run ID (plan slug). Scopes state to the current forge run. Without it, falls back to legacy global-state behavior.",
           },
           action: {
             type: "string",
@@ -371,13 +388,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ─── validate ──────────────────────────────────────────────────────
 
 function handleValidate(args) {
-  const { moduleId, commands = [], files = [], contractChecks = [] } = args;
+  const { moduleId, commands = [], files = [], contractChecks = [], runId } = args;
+  // v0.4.0: `cwd` can now override the module-level CWD so workers running
+  // inside git worktrees can redirect validation to their own directory.
+  // Precedence: args.cwd > FORGE_CWD env > process.cwd(). Falls back to CWD
+  // (the server-level constant) when args.cwd is not provided, preserving
+  // backward compatibility for legacy callers.
+  const workingDir = args.cwd ? resolve(args.cwd) : CWD;
+
+  // Early validation: if the caller passed a cwd that doesn't exist, fail
+  // fast with a clear diagnostic instead of letting every command error with
+  // a confusing ENOENT. This also catches typos in worktree paths.
+  if (args.cwd && !existsSync(workingDir)) {
+    return textResult(
+      JSON.stringify(
+        {
+          passed: false,
+          score: 0,
+          results: [
+            {
+              type: "cwd_check",
+              passed: false,
+              cwd: workingDir,
+              error: `Working directory does not exist: ${workingDir}`,
+            },
+          ],
+          stagnant: false,
+          velocity: null,
+          oscillating: false,
+          attempt: 0,
+          recommendation: "ESCALATE",
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   const results = [];
   let allPassed = true;
 
-  // 1. Check files exist
+  // 1. Check files exist (now relative to working dir, not server CWD)
   for (const f of files) {
-    const absPath = resolve(CWD, f);
+    const absPath = resolve(workingDir, f);
     const exists = existsSync(absPath);
     results.push({ type: "file_check", file: f, passed: exists });
     if (!exists) allPassed = false;
@@ -385,7 +438,7 @@ function handleValidate(args) {
 
   // 2. AST-level syntax validation on listed files
   for (const f of files) {
-    const absPath = resolve(CWD, f);
+    const absPath = resolve(workingDir, f);
     if (!existsSync(absPath)) continue;
     const ext = extname(f).toLowerCase();
     let syntaxCmd = null;
@@ -401,7 +454,7 @@ function handleValidate(args) {
     if (syntaxCmd) {
       try {
         execSync(syntaxCmd, {
-          cwd: CWD,
+          cwd: workingDir,
           timeout: 60_000,
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
@@ -422,8 +475,8 @@ function handleValidate(args) {
 
   // 3. Cross-module API contract checks
   for (const check of contractChecks) {
-    const exporterPath = resolve(CWD, check.exporter);
-    const importerPath = resolve(CWD, check.importer);
+    const exporterPath = resolve(workingDir, check.exporter);
+    const importerPath = resolve(workingDir, check.importer);
 
     if (!existsSync(exporterPath) || !existsSync(importerPath)) {
       results.push({
@@ -509,11 +562,11 @@ function handleValidate(args) {
     });
   }
 
-  // 4. Run verification commands
+  // 4. Run verification commands (in working dir, not server CWD)
   for (const cmd of commands) {
     try {
       const output = execSync(cmd, {
-        cwd: CWD,
+        cwd: workingDir,
         timeout: 120_000,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
@@ -538,8 +591,8 @@ function handleValidate(args) {
     }
   }
 
-  // 5. Update iteration state with validation result
-  const iter = loadIterationState(moduleId);
+  // 5. Update iteration state with validation result (keyed on runId + moduleId)
+  const iter = loadIterationState(moduleId, runId);
   const total = results.length || 1;
   const score = results.filter((r) => r.passed).length / total;
   const currentIssues = results
@@ -598,7 +651,7 @@ function handleValidate(args) {
     stagnant,
   });
   iter.stagnant = stagnant;
-  saveIterationState(moduleId, iter);
+  saveIterationState(moduleId, iter, runId);
 
   const recommendation = stagnant
     ? "ESCALATE"
@@ -866,22 +919,24 @@ function handleMemorySave(args) {
 // ─── iteration_state ───────────────────────────────────────────────
 
 function handleIterationState(args) {
-  const { moduleId, action } = args;
+  const { moduleId, action, runId } = args;
 
   if (action === "get") {
-    const state = loadIterationState(moduleId);
+    const state = loadIterationState(moduleId, runId);
     return textResult(JSON.stringify(state, null, 2));
   }
 
   if (action === "reset") {
-    const iterPath = join(FORGE_DIR, "iterations", `${moduleId}.json`);
+    const iterPath = _iterationPath(moduleId, runId);
     const empty = { attempts: [], scores: [], stagnant: false };
+    const parent = dirname(iterPath);
+    if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
     writeFileSync(iterPath, JSON.stringify(empty, null, 2));
-    return textResult(`Reset iteration state for ${moduleId}`);
+    return textResult(`Reset iteration state for ${moduleId}${runId ? ` (run ${runId})` : ""}`);
   }
 
   if (action === "update") {
-    const state = loadIterationState(moduleId);
+    const state = loadIterationState(moduleId, runId);
     const update = args.update || {};
 
     if (update.status) state.lastStatus = update.status;
@@ -897,7 +952,7 @@ function handleIterationState(args) {
       });
     }
 
-    saveIterationState(moduleId, state);
+    saveIterationState(moduleId, state, runId);
     return textResult(
       JSON.stringify(
         { updated: true, attempt: state.attempts.length, stagnant: state.stagnant },
@@ -1132,8 +1187,36 @@ function writeProgressFile() {
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-function loadIterationState(moduleId) {
-  const iterPath = join(FORGE_DIR, "iterations", `${moduleId}.json`);
+// v0.4.0: iteration state is now keyed on (runId, moduleId) instead of just
+// moduleId. Previously, state accumulated across every forge run that ever
+// had a module with the same ID, so stagnation/attempt counts were global
+// (we once saw "attempt 21" on a freshly-spawned m1). Passing runId scopes
+// state to the current run. Backward-compatible: when runId is absent,
+// empty, or whitespace-only, falls back to the legacy path so existing
+// state is not orphaned.
+//
+// SECURITY: runId is used as a filesystem path segment. Reject anything
+// that isn't a safe slug to prevent path traversal (e.g., "../../etc").
+// Node's path.join normalizes traversal sequences so the naive form would
+// escape FORGE_DIR. The regex below allows only [A-Za-z0-9._-] and limits
+// length — matches typical plan slug conventions.
+const _RUN_ID_PATTERN = /^[\w.-]{1,128}$/;
+
+function _iterationPath(moduleId, runId) {
+  const hasRunId = typeof runId === "string" && runId.trim().length > 0;
+  if (hasRunId) {
+    if (!_RUN_ID_PATTERN.test(runId)) {
+      throw new Error(
+        `Invalid runId: ${JSON.stringify(runId)}. Must match ${_RUN_ID_PATTERN} (alphanumerics, dot, dash, underscore; max 128 chars).`,
+      );
+    }
+    return join(FORGE_DIR, "iterations", runId, `${moduleId}.json`);
+  }
+  return join(FORGE_DIR, "iterations", `${moduleId}.json`);
+}
+
+function loadIterationState(moduleId, runId) {
+  const iterPath = _iterationPath(moduleId, runId);
   if (existsSync(iterPath)) {
     try {
       return JSON.parse(readFileSync(iterPath, "utf-8"));
@@ -1144,8 +1227,13 @@ function loadIterationState(moduleId) {
   return { attempts: [], scores: [], stagnant: false };
 }
 
-function saveIterationState(moduleId, state) {
-  const iterPath = join(FORGE_DIR, "iterations", `${moduleId}.json`);
+function saveIterationState(moduleId, state, runId) {
+  const iterPath = _iterationPath(moduleId, runId);
+  // Ensure parent directory exists (especially for runId subdirs)
+  const parent = dirname(iterPath);
+  if (!existsSync(parent)) {
+    mkdirSync(parent, { recursive: true });
+  }
   writeFileSync(iterPath, JSON.stringify(state, null, 2));
 }
 
