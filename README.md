@@ -3,7 +3,7 @@
 [![CI](https://github.com/TT-Wang/forge/actions/workflows/ci.yml/badge.svg)](https://github.com/TT-Wang/forge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)](https://nodejs.org/)
-[![Glama](https://glama.ai/mcp/servers/TT-Wang/forge/badges/score.svg)](https://glama.ai/mcp/servers/TT-Wang/forge)
+[![forge MCP server](https://glama.ai/mcp/servers/TT-Wang/forge/badges/score.svg)](https://glama.ai/mcp/servers/TT-Wang/forge)
 
 Structured planning, parallel execution, and deep validation for Claude Code.
 
