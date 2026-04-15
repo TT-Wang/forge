@@ -84,8 +84,64 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "validate",
-      description:
-        "Run verification commands, file-existence checks, syntax validation, and cross-module API contract checks for a forge module. Returns structured pass/fail with stagnation detection, velocity, and oscillation analysis. v0.4.0: accepts optional `cwd` to redirect validation to a worktree, and `runId` to scope iteration state.",
+      description: `Run full verification for a forge module against a specific working directory. Executes the module's verify commands in a subprocess, checks that required files exist on disk, runs AST-level syntax validation for .js/.mjs/.cjs/.py/.ts/.tsx files, and performs cross-module API contract checks (importer references matched against exporter symbols). Tracks attempts across retries, detects stagnation when the same failure set recurs, measures score velocity across attempts, and flags oscillation when the current failures match any of the last four attempts. Returns a structured pass/fail verdict with a per-check breakdown and a recommendation field (PROCEED, RETRY, ESCALATE).
+
+Behaviour:
+  - MUTATION. Appends an attempt entry to the module's iteration state
+    at \`.forge/iterations/<runId>/<moduleId>.json\` when runId is
+    provided, or the legacy flat path otherwise. Also emits a
+    \`tool_call\` and a \`validate\` event to the current run's JSONL log.
+  - No authentication, no network calls, no rate limits.
+  - Verify commands run with a 2-minute per-command timeout; AST
+    syntax checks get 60 seconds each. Commands execute through the
+    shell (\`execSync\`) so plan-generated commands can use pipes and
+    redirects — plans are human-approved before execution.
+  - The \`cwd\` argument (v0.4.0+) redirects file existence checks,
+    syntax checks, contract checks, and command execution to a
+    specified directory. Precedence: \`args.cwd > FORGE_CWD env >
+    process.cwd()\`. Workers running in isolated git worktrees MUST
+    pass their worktree path as \`cwd\` — otherwise validation silently
+    checks the main project root, and every worker DONE report would
+    be meaningless.
+  - Nonexistent \`cwd\` returns a \`cwd_check\` failure with
+    \`recommendation: "ESCALATE"\` and a clear diagnostic, rather than
+    letting every command fail with an opaque ENOENT.
+
+Use when:
+  - The orchestrator has received a DONE report from a worker agent
+    and needs to verify that the changes actually compile, run, and
+    honor any cross-module API contracts before merge-back.
+  - A module has just been retried by the debugger agent and you
+    want to know whether the attempt count has crossed the stagnation
+    threshold.
+  - A user invokes \`/forge-validate <moduleId>\` manually to re-run
+    checks on a completed or in-progress module.
+
+Do NOT use for:
+  - Plan-level structural checks (DAG cycles, missing commands) —
+    use \`validate_plan\` instead.
+  - Querying past validation attempts without bumping a counter —
+    use \`forge_logs\` or \`iteration_state\` with \`action: "get"\`.
+  - Running commands outside the context of a known moduleId — this
+    tool mutates per-module iteration state.
+
+Returns: A JSON text block with
+\`{ passed, score, results[], attempt, stagnant, velocity, oscillating,
+recommendation, sameAsPrev }\`
+where \`results[]\` is a list of per-check objects tagged with \`type\`
+(\`file_check\`, \`syntax_check\`, \`contract_check\`, \`command\`,
+\`cwd_check\`) and their pass/fail metadata.
+
+Example:
+    validate({
+      moduleId: "m3",
+      runId: "2026-04-15-1",
+      files: ["src/auth.mjs", "src/auth.test.mjs"],
+      commands: ["node --test src/auth.test.mjs"],
+      cwd: "/tmp/forge-worktrees/m3"
+    })
+    → { "passed": true, "score": 1.0, "recommendation": "PROCEED",
+        "results": [ ... ], "attempt": 1, "stagnant": false }`,
       inputSchema: {
         type: "object",
         properties: {
@@ -133,8 +189,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "validate_plan",
-      description:
-        "Validate a forge plan for structural correctness: DAG cycle detection, file overlap warnings, command existence checks, and schema validation.",
+      description: `Structurally validate a forge plan JSON file before any worker spawns. Checks: required-field schema (\`id\`, \`title\`, \`objective\`, \`files\`, \`verify\`, \`doneWhen\` on every module), DAG cycle detection via Kahn's algorithm, references to unknown \`dependsOn\` modules, file-overlap warnings between modules that could run in parallel (which would cause worktree merge conflicts), and verify-command existence on \`PATH\` (commands are checked via \`execFileSync('which', [firstWord])\` to avoid shell injection via crafted verify strings). Catches plans that would fail at runtime and reports concrete errors before any worker is spawned.
+
+Behaviour:
+  - READ-ONLY for the plan file. Emits a \`plan_validation\` event to
+    the current run's JSONL log.
+  - No authentication, no network, no rate limits.
+  - Never throws to the caller — every problem is returned as an
+    entry in the \`errors[]\` or \`warnings[]\` arrays.
+  - \`planPath\` is optional; when omitted, the most recently modified
+    file in \`.forge/plans/\` is used.
+
+Use when:
+  - Immediately after the planner agent writes a plan to disk, and
+    before the orchestrator enters Phase 1b (plan approval).
+  - Debugging why a plan's execution order looks wrong — file-overlap
+    warnings usually explain "two parallel workers clobbered each
+    other" bug reports.
+  - A human is hand-editing a plan file and wants a pre-flight check.
+
+Do NOT use for:
+  - Executing a plan — this tool is dry-run only.
+  - Validating a single module's build output — use \`validate\`
+    instead.
+  - Inspecting attempt counts or retry history — use
+    \`iteration_state\` with \`action: "get"\`.
+
+Returns: \`{ valid: bool, errors[], warnings[] }\`. \`valid\` is true iff
+\`errors[]\` is empty. Errors halt execution (cycles, missing required
+fields, commands not found on PATH). Warnings are advisory (file
+overlap between parallel modules).
+
+Example:
+    validate_plan({ planPath: ".forge/plans/add-auth.json" })
+    → { "valid": true, "errors": [],
+        "warnings": [
+          { "type": "file_overlap", "modules": ["m2", "m3"],
+            "files": ["src/config.mjs"],
+            "message": "Modules m2 and m3 both modify src/config.mjs but could run in parallel. Consider adding a dependency edge." }
+        ] }`,
       inputSchema: {
         type: "object",
         properties: {
@@ -148,8 +241,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "memory_recall",
-      description:
-        "Search project and global memory for patterns relevant to a query. Returns matching learnings sorted by confidence.",
+      description: `Search forge's learned-pattern memory for entries relevant to a query. Memory is a simple JSONL store (not a vector index) — forge keeps it deliberately primitive so the format is human-readable, git-friendly, and cheap to grep. Each entry has a category (convention, failure_pattern, success_pattern, test_command, architecture, dependency, tool_usage), a free-text pattern, a confidence in [0,1], and a timestamp. Results are keyword-matched against pattern text, category name, and any included tags.
+
+Behaviour:
+  - READ-ONLY, idempotent. No telemetry side effects, no access
+    counters bumped, no state mutated.
+  - No authentication, no network, no rate limits.
+  - Reads \`.forge/memory/project.jsonl\` and/or
+    \`.forge/memory/global.jsonl\` depending on \`scope\`.
+  - Returns an informative empty result if the query has no matches
+    — never throws.
+
+Use when:
+  - The planner agent is about to decompose an objective and wants
+    to check whether forge has already learned conventions for this
+    project (test commands, style rules, known failure modes).
+  - The debugger agent is analysing a failure and wants to check
+    whether the same pattern has been seen and resolved before.
+  - A worker agent is deciding between two approaches and wants to
+    bias towards one that previously worked.
+
+Do NOT use for:
+  - Saving new patterns — use \`memory_save\`.
+  - Looking up per-module retry history — use \`iteration_state\`.
+  - Querying structured run events — use \`forge_logs\`.
+  - Full-text search across commit history or codebase — this is
+    learned patterns only, not source code.
+
+Returns: A text block listing matching entries, each showing
+category, pattern, confidence, and timestamp. Grouped by scope
+(project first, then global) and sorted by confidence descending
+within each group.
+
+Example:
+    memory_recall({ query: "test command", scope: "project" })
+    → "Found 2 matches in project memory:
+       [test_command] 0.9 — pnpm vitest --run (watch mode hangs in CI)
+       [test_command] 0.8 — avoid npm test, use pnpm test instead"`,
       inputSchema: {
         type: "object",
         properties: {
@@ -169,8 +297,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "memory_save",
-      description:
-        "Save a learned pattern to project or global memory for future recall.",
+      description: `Persist a learned pattern to forge's project or global memory for future recall. Patterns are stored as JSONL entries with category, pattern text, confidence, and timestamp. Duplicate patterns (same category + same text, case-insensitive) are rejected on write to prevent memory bloat from repeatedly saving the same lesson across runs.
+
+Behaviour:
+  - MUTATION. Appends a new JSON line to
+    \`.forge/memory/<scope>.jsonl\`. Dedup check reads the existing
+    file first; if a matching \`(category, pattern)\` already exists,
+    the save is skipped and a "duplicate skipped" message is returned.
+  - Idempotent on \`(category, pattern)\`: calling twice with the same
+    values produces one entry, not two.
+  - No authentication, no network, no rate limits.
+  - Appends are atomic on POSIX filesystems, so parallel workers can
+    save concurrently without corrupting the file.
+
+Use when:
+  - Phase 5 (Learn) at the end of a forge run — the orchestrator
+    records test commands that worked, conventions discovered by
+    the planner, and failure patterns surfaced by the debugger.
+  - A debugger agent has diagnosed a non-obvious root cause and
+    wants to make sure the next run doesn't re-learn it from
+    scratch.
+  - A reviewer agent has identified a convention (naming, file
+    layout, test framework) the project consistently follows and
+    wants future workers to match it automatically.
+
+Do NOT use for:
+  - Ephemeral session state — use \`session_state\` instead. Memory
+    is for knowledge that should outlive the run.
+  - Module retry history — that is tracked automatically by
+    \`iteration_state\` and \`validate\`.
+  - Run-specific commentary or event logs — those belong in
+    \`forge_logs\`, which is written automatically on every tool call.
+  - Huge blobs of text (>1 KB) — memory entries are meant to be
+    compact lessons, not dumps.
+
+Returns: Confirmation string — either "Saved to <scope> memory
+[<category>]: <pattern>" on new insert, or "Duplicate pattern
+already in <scope> memory, skipped." on dedup hit.
+
+Example:
+    memory_save({
+      pattern: "pnpm vitest --run for CI; watch mode hangs",
+      category: "test_command",
+      scope: "project",
+      confidence: 0.9
+    })
+    → "Saved to project memory [test_command]: pnpm vitest --run..."`,
       inputSchema: {
         type: "object",
         properties: {
@@ -210,8 +382,56 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "iteration_state",
-      description:
-        "Get or update the retry/iteration state for a module. Tracks attempts, scores, and stagnation. v0.4.0: accepts optional `runId` to scope state per forge run (strongly recommended — without it, attempts accumulate globally across every run).",
+      description: `Read, update, or reset the per-module retry state for a forge run. Tracks attempt count, score history, last status, last root cause from the debugger, and a stagnation flag. In v0.4.0+ state is scoped per run via \`runId\` so attempt counts don't accumulate across unrelated forge runs that happen to share a moduleId (pre-v0.4.0 a brand-new m1 in a fresh plan could see \`attempt: 21\` because 20 prior runs had also used "m1" — stagnation detection would then escalate a module that had just started).
+
+Behaviour:
+  - READ (get), MUTATION (update, reset).
+  - State files live at
+    \`.forge/iterations/<runId>/<moduleId>.json\` when runId is
+    provided, or \`.forge/iterations/<moduleId>.json\` for legacy
+    callers.
+  - \`runId\` is guarded against path traversal via the
+    \`_RUN_ID_PATTERN\` regex (\`/^[\\w.-]{1,128}$/\`) — invalid
+    values return a structured error, never a traversal attempt.
+  - No authentication, no network, no rate limits.
+  - \`get\` on an unknown module returns a clean empty-state object
+    \`{ attempts: [], scores: [], stagnant: false }\` rather than
+    throwing.
+
+Use when:
+  - The orchestrator wants to know how many times module m3 has
+    been retried so far and whether the stagnation flag has
+    flipped — drives the decision between RETRY and ESCALATE.
+  - A debugger agent wants to inspect the last root cause before
+    proposing a new approach.
+  - Resetting: a plan has finished and the next run should start
+    fresh even if moduleIds are reused. Or a human has manually
+    cleared a stuck module and wants the counter zeroed.
+
+Do NOT use for:
+  - Cross-module reasoning or run-wide progress — that is
+    \`session_state\`.
+  - Recording the result of a single validation attempt — that is
+    done automatically by \`validate\` on every call.
+  - Inspecting validation results without side effects — \`get\` is
+    safe, but \`update\` bumps counters and flags.
+
+Returns (get): The full state object
+\`{ attempts: [...], scores: [...], stagnant: bool, lastStatus,
+lastRootCause }\`.
+Returns (update): \`{ updated: true, attempt: N, stagnant: bool }\`.
+Returns (reset): A confirmation string.
+
+Example:
+    iteration_state({
+      moduleId: "m3",
+      action: "get",
+      runId: "2026-04-15-1"
+    })
+    → { "attempts": [
+          { "timestamp": "...", "status": "failed", "score": 0.4, "issues": [...] },
+          { "timestamp": "...", "status": "failed", "score": 0.6, "issues": [...] }
+        ], "scores": [0.4, 0.6], "stagnant": false }`,
       inputSchema: {
         type: "object",
         properties: {
@@ -265,8 +485,56 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "forge_logs",
-      description:
-        "Query structured logs from forge runs. Filter by runId, moduleId, phase, or severity.",
+      description: `Query the structured JSONL event stream that forge writes on every tool call throughout a run. Filter by \`runId\`, \`moduleId\`, \`phase\` (\`planning\`, \`execution\`, \`validation\`, \`review\`, \`retry\`, \`memory\`, \`session\`, \`tool_call\`, \`plan_validation\`), \`severity\` (\`info\`, \`warn\`, \`error\`), and \`limit\`. Lets agents reconstruct what happened without re-running anything, and lets humans audit a run after the fact without paging through console output.
+
+Behaviour:
+  - READ-ONLY, idempotent.
+  - Reads \`.forge/logs/<runId>.jsonl\`. When \`runId\` is omitted,
+    the most recently modified log file in \`.forge/logs/\` is used.
+  - \`runId\` is guarded against path traversal via
+    \`_RUN_ID_PATTERN\`.
+  - JSON parse errors on individual lines are silently skipped —
+    a single corrupt line does not crash the query.
+  - No authentication, no network, no rate limits.
+
+Use when:
+  - A debugger agent needs the sequence of events leading up to a
+    module failure — especially useful for diagnosing why
+    validation failed even though review passed.
+  - A user wants to audit what a forge run actually did, after the
+    fact, without re-running anything.
+  - The orchestrator wants to confirm that a prior phase completed
+    successfully before transitioning.
+  - Investigating an escalation: pull all \`severity: "error"\`
+    entries for the run and read them in order.
+
+Do NOT use for:
+  - Live progress display — read \`/tmp/forge-status.json\` which
+    the server refreshes on every tool call, or call
+    \`session_state\` with \`action: "list"\`.
+  - Appending new entries — the server writes logs automatically;
+    there is no external append API.
+  - Long-term knowledge — that's \`memory_save\` / \`memory_recall\`.
+
+Returns: \`{ runId, entries: [...], total }\`. Each entry is
+\`{ timestamp, runId, phase, moduleId, event, severity, data }\`.
+\`data\` is a free-form object whose shape depends on the event
+type.
+
+Example:
+    forge_logs({
+      runId: "2026-04-15-1",
+      phase: "validation",
+      severity: "error",
+      limit: 10
+    })
+    → { "runId": "2026-04-15-1", "total": 2, "entries": [
+          { "timestamp": "...", "phase": "validation",
+            "moduleId": "m3", "event": "validate",
+            "severity": "error",
+            "data": { "passed": false, "score": 0.5, ... } },
+          ...
+        ] }`,
       inputSchema: {
         type: "object",
         properties: {
@@ -296,8 +564,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "session_state",
-      description:
-        "Save, load, or list orchestrator session state for resumability. Persists progress across crashes or conversation restarts.",
+      description: `Save, load, or list orchestrator session snapshots for resumability. Lets a \`/forge\` workflow survive a crash, conversation restart, or an intentional pause — the next invocation can pick up exactly where the previous one left off, without re-planning or re-running completed modules.
+
+Behaviour:
+  - MUTATION on \`save\`, READ on \`load\` and \`list\`.
+  - State lives at \`.forge/state/<runId>.json\`. Writes use atomic
+    tmp + rename semantics so a crash mid-save can never leave a
+    partial file on disk.
+  - \`runId\` is guarded against path traversal via
+    \`_RUN_ID_PATTERN\` (\`/^[\\w.-]{1,128}$/\`).
+  - Every \`save\` stamps the state with a fresh \`lastUpdatedAt\`
+    ISO timestamp; \`list\` sorts most-recent first using this
+    field.
+  - No authentication, no network, no rate limits.
+
+Use when:
+  - The orchestrator has just completed a phase transition (plan
+    approved, first parallel batch finished, module escalated)
+    and wants to persist progress in case the session drops.
+  - A fresh Claude Code session wants to resume an abandoned run:
+    call \`session_state({ action: "list" })\`, find the most
+    recent run with \`completedCount < totalCount\`, then
+    \`session_state({ action: "load", runId: "..." })\`.
+  - A user has invoked \`/forge-status\` and the orchestrator is
+    computing the summary.
+
+Do NOT use for:
+  - Per-module retry state — that's \`iteration_state\`.
+  - Cross-run learned patterns — that's \`memory_save\`.
+  - Ephemeral progress for the statusline — the server writes
+    \`/tmp/forge-status.json\` automatically on every tool call;
+    don't duplicate it here.
+
+Returns:
+  \`save\`: \`{ saved: true, runId, lastUpdatedAt }\`
+  \`load\`: \`{ found: true, ...state }\` when the file exists,
+  \`{ found: false, runId }\` when it does not.
+  \`list\`: \`{ sessions: [{ runId, lastUpdatedAt, currentPhase,
+           completedCount, totalCount }, ...] }\` sorted by
+  \`lastUpdatedAt\` descending.
+
+Example:
+    session_state({
+      action: "save",
+      runId: "2026-04-15-1",
+      state: {
+        currentPhase: "execute",
+        moduleStatuses: { m1: "done", m2: "running", m3: "pending" },
+        completedModules: ["m1"],
+        startedAt: "2026-04-15T10:00:00Z"
+      }
+    })
+    → { "saved": true, "runId": "2026-04-15-1", "lastUpdatedAt": "..." }`,
       inputSchema: {
         type: "object",
         properties: {
