@@ -9,12 +9,26 @@ Turn Claude Code into a structured delivery loop: plan the work, run modules in 
 
 ## Install
 
+Copy-paste:
+
 ```bash
 claude plugin marketplace add TT-Wang/forge
 claude plugin install forge@tt-wang-plugins
 ```
 
 First start may take a few seconds because Forge bootstraps its MCP server dependencies automatically.
+
+After install:
+
+1. restart Claude Code if it was already open
+2. open any repo you want to work in
+3. run `/forge <objective>`
+
+Example:
+
+```text
+/forge add audit logging for admin actions
+```
 
 ## The Pitch
 
@@ -58,6 +72,19 @@ Forge is not trying to replace normal usage. It is for the tasks where orchestra
 
 ## Quick Start
 
+### 60-second setup
+
+1. Install Forge with the two commands above
+2. Restart Claude Code
+3. Open your project
+4. Paste one objective:
+
+```text
+/forge add JWT auth with refresh tokens
+```
+
+5. Approve the generated plan
+
 ### Run
 
 ```text
@@ -96,6 +123,13 @@ Forge is not trying to replace normal usage. It is for the tasks where orchestra
 ```
 
 That is the experience Forge is aiming for: less manual steering, more visible progress, and fewer silent failures.
+
+## What To Expect On First Run
+
+- Forge will create a local `.forge/` directory in your project
+- the MCP server may spend a few seconds installing its Node dependencies
+- your first real interaction is the plan review step
+- nothing executes until you explicitly approve the plan
 
 ## Current Project Structure
 
