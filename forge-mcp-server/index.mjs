@@ -12,7 +12,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import {
   readFileSync,
   writeFileSync,
@@ -67,12 +67,6 @@ function logEvent(event) {
   }
 }
 
-function initRunLog(runId) {
-  currentRunId = runId;
-  const logsDir = join(FORGE_DIR, "logs");
-  mkdirSync(logsDir, { recursive: true });
-}
-
 // ─── Ensure directories ──────────────────────────────────────────
 
 for (const dir of ["plans", "memory", "iterations", "logs", "state"]) {
@@ -80,7 +74,7 @@ for (const dir of ["plans", "memory", "iterations", "logs", "state"]) {
 }
 
 const server = new Server(
-  { name: "forge", version: "0.2.0" },
+  { name: "forge", version: "0.4.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -795,7 +789,11 @@ function handleValidatePlan(args) {
       if (checkedCommands.has(firstWord)) continue;
       checkedCommands.add(firstWord);
       try {
-        execSync(`which ${firstWord}`, { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
+        execFileSync("which", [firstWord], {
+          encoding: "utf-8",
+          timeout: 5000,
+          stdio: ["pipe", "pipe", "pipe"],
+        });
       } catch {
         errors.push({ type: "missing_command", message: `Command '${firstWord}' not found on PATH (used in ${mod.id} verify)` });
       }
@@ -921,6 +919,12 @@ function handleMemorySave(args) {
 function handleIterationState(args) {
   const { moduleId, action, runId } = args;
 
+  if (runId !== undefined && !_RUN_ID_PATTERN.test(runId)) {
+    return errorResult(
+      `Invalid runId: ${JSON.stringify(runId)}. Must match ${_RUN_ID_PATTERN}.`
+    );
+  }
+
   if (action === "get") {
     const state = loadIterationState(moduleId, runId);
     return textResult(JSON.stringify(state, null, 2));
@@ -973,6 +977,12 @@ function handleForgeLogs(args) {
     return textResult(JSON.stringify({ entries: [], message: "No logs directory found." }));
   }
 
+  if (args.runId !== undefined && !_RUN_ID_PATTERN.test(args.runId)) {
+    return errorResult(
+      `Invalid runId: ${JSON.stringify(args.runId)}. Must match ${_RUN_ID_PATTERN}.`
+    );
+  }
+
   let runId = args.runId;
   if (!runId) {
     // Find most recent log file
@@ -1013,6 +1023,12 @@ function handleForgeLogs(args) {
 function handleSessionState(args) {
   const { action } = args;
   const stateDir = join(FORGE_DIR, "state");
+
+  if (args.runId !== undefined && !_RUN_ID_PATTERN.test(args.runId)) {
+    return errorResult(
+      `Invalid runId: ${JSON.stringify(args.runId)}. Must match ${_RUN_ID_PATTERN}.`
+    );
+  }
 
   if (action === "save") {
     if (!args.runId) return errorResult("runId is required for save action");
@@ -1108,19 +1124,11 @@ function writeProgressFile() {
     }
   }
 
-  const iterDir = join(FORGE_DIR, "iterations");
-  const iterations = {};
-  if (existsSync(iterDir)) {
-    for (const f of readdirSync(iterDir).filter((f) => f.endsWith(".json"))) {
-      try {
-        const id = f.replace(".json", "");
-        iterations[id] = JSON.parse(readFileSync(join(iterDir, f), "utf-8"));
-      } catch (_) {}
-    }
-  }
-
-  // Try to read currentPhase from latest session state
+  // Read currentPhase + most recent runId from latest session state.
+  // The runId lets us scope the iteration scan to the current run's
+  // subdirectory (v0.4.0 layout: iterations/<runId>/<moduleId>.json).
   let currentPhase = null;
+  let latestRunId = null;
   const stateDir = join(FORGE_DIR, "state");
   if (existsSync(stateDir)) {
     const stateFiles = readdirSync(stateDir)
@@ -1131,7 +1139,49 @@ function writeProgressFile() {
       try {
         const latestState = JSON.parse(readFileSync(join(stateDir, stateFiles[0].name), "utf-8"));
         currentPhase = latestState.currentPhase || null;
+        latestRunId = stateFiles[0].name.replace(".json", "");
       } catch (_) {}
+    }
+  }
+
+  // Collect iteration state from both the legacy flat layout
+  // (iterations/<moduleId>.json, pre-v0.4.0) and the per-run layout
+  // (iterations/<runId>/<moduleId>.json, v0.4.0+). Per-run entries for
+  // the current session take precedence over any legacy same-ID entries.
+  const iterDir = join(FORGE_DIR, "iterations");
+  const iterations = {};
+  if (existsSync(iterDir)) {
+    // 1. Legacy flat files first (lower priority).
+    for (const entry of readdirSync(iterDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      try {
+        const id = entry.name.replace(".json", "");
+        iterations[id] = JSON.parse(readFileSync(join(iterDir, entry.name), "utf-8"));
+      } catch (_) {}
+    }
+
+    // 2. Per-run subdirectories. Prefer the current run when we know it,
+    // otherwise take the most recently modified run directory.
+    const runSubdirs = readdirSync(iterDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => ({ name: e.name, mtime: statSync(join(iterDir, e.name)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+
+    let activeRun = null;
+    if (latestRunId && runSubdirs.some((d) => d.name === latestRunId)) {
+      activeRun = latestRunId;
+    } else if (runSubdirs.length > 0) {
+      activeRun = runSubdirs[0].name;
+    }
+
+    if (activeRun) {
+      const runDir = join(iterDir, activeRun);
+      for (const f of readdirSync(runDir).filter((f) => f.endsWith(".json"))) {
+        try {
+          const id = f.replace(".json", "");
+          iterations[id] = JSON.parse(readFileSync(join(runDir, f), "utf-8"));
+        } catch (_) {}
+      }
     }
   }
 

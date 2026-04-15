@@ -5,9 +5,9 @@
 // directory *before* importing the module so each test run gets an
 // isolated workspace.
 
-import { test, before, after } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -17,6 +17,7 @@ process.env.FORGE_CWD = TMP_ROOT;
 // Import AFTER setting FORGE_CWD.
 const mcp = await import("../index.mjs");
 const {
+  handleValidate,
   handleValidatePlan,
   handleMemorySave,
   handleMemoryRecall,
@@ -310,6 +311,86 @@ test("forge_logs returns entries after events have been logged", () => {
 
   const out = parseResult(handleForgeLogs({ limit: 50 }));
   assert.match(out, /plan_validation|validate_plan/);
+});
+
+// ─── validate (happy path + cwd escalation) ───────────────────────
+
+test("validate happy path: real file + passing command returns passed", () => {
+  const srcDir = join(TMP_ROOT, "validate-happy");
+  mkdirSync(srcDir, { recursive: true });
+  const realFile = join(srcDir, "hello.mjs");
+  writeFileSync(realFile, "export const hello = () => 'world';\n");
+
+  const out = parseJsonResult(
+    handleValidate({
+      moduleId: "validate-happy",
+      files: [realFile],
+      commands: ["node --version"],
+      runId: "test-validate-happy",
+    })
+  );
+
+  assert.equal(out.passed, true, `expected passed=true, got results=${JSON.stringify(out.results)}`);
+  assert.ok(out.results.some((r) => r.type === "file_check" && r.passed));
+  assert.ok(out.results.some((r) => r.type === "command" && r.passed));
+});
+
+test("validate: nonexistent cwd returns recommendation ESCALATE", () => {
+  const out = parseJsonResult(
+    handleValidate({
+      moduleId: "validate-bad-cwd",
+      files: [],
+      commands: ["node --version"],
+      cwd: "/definitely/not/a/real/path/forge-xyz-12345",
+      runId: "test-validate-bad-cwd",
+    })
+  );
+
+  assert.equal(out.passed, false);
+  assert.equal(out.recommendation, "ESCALATE");
+  assert.ok(out.results.some((r) => r.type === "cwd_check" && r.passed === false));
+});
+
+test("validate: missing file flagged as file_check failure", () => {
+  const out = parseJsonResult(
+    handleValidate({
+      moduleId: "validate-missing-file",
+      files: [join(TMP_ROOT, "does-not-exist.mjs")],
+      commands: ["node --version"],
+      runId: "test-validate-missing-file",
+    })
+  );
+
+  assert.equal(out.passed, false);
+  assert.ok(
+    out.results.some((r) => r.type === "file_check" && r.passed === false),
+    "expected a failing file_check result"
+  );
+});
+
+// ─── P0 regression: runId path-traversal guards ────────────────────
+
+test("session_state rejects runId with traversal characters", () => {
+  const out = handleSessionState({
+    action: "save",
+    runId: "../../etc/passwd",
+    state: { currentPhase: "x" },
+  });
+  assert.equal(out.isError, true);
+});
+
+test("forge_logs rejects runId with traversal characters", () => {
+  const out = handleForgeLogs({ runId: "../../etc/passwd" });
+  assert.equal(out.isError, true);
+});
+
+test("iteration_state rejects runId with traversal characters", () => {
+  const out = handleIterationState({
+    moduleId: "m1",
+    action: "get",
+    runId: "../../etc/passwd",
+  });
+  assert.equal(out.isError, true);
 });
 
 // ─── smoke: .forge directory created at import time ───────────────

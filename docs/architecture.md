@@ -57,8 +57,11 @@ smarter.
    overlaps, verify-command existence, schema).
 3. **Execute** — for each DAG layer, spawn worker agents in parallel
    (one git worktree per module).
-4. **Validate module** — each worker calls `validate` on its own
-   worktree; stagnation triggers the debugger.
+4. **Validate module** — the orchestrator calls `validate` with
+   `cwd: <worktreePath>` after a worker reports DONE, so verification
+   runs against the worker's isolated worktree rather than main.
+   Stagnation triggers the debugger. Workers themselves do not call
+   `validate` — they self-check via plain Bash and hand off.
 5. **Review** — the reviewer agent checks the diff against the module's
    contract.
 6. **Retry** — failed modules go to the debugger agent, which does
@@ -71,8 +74,9 @@ smarter.
 - **planner** — Reads the repo, produces a module DAG with `files[]`,
   `verify[]` commands, `doneWhen` criteria, and `dependsOn` edges.
 - **worker** — Executes one module. Spawned inside its own worktree,
-  calls `validate` with `cwd=<worktreePath>` so verification sees its
-  changes, not main.
+  self-checks via plain Bash, and hands off a DONE report. The
+  orchestrator then calls `validate` with `cwd: <worktreePath>` to
+  verify the worker's changes before merge-back.
 - **reviewer** — Independent correctness + security review of a
   completed module's diff.
 - **debugger** — Invoked on stagnation. Reads structured logs via

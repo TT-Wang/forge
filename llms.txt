@@ -55,7 +55,7 @@ claude plugin install forge@tt-wang-plugins
 
 - Repo: https://github.com/TT-Wang/forge
 - Issues: https://github.com/TT-Wang/forge/issues
-- Changelog: https://github.com/TT-Wang/forge/blob/master/CHANGELOG.md
-- Security policy: https://github.com/TT-Wang/forge/blob/master/SECURITY.md
-- Contributing: https://github.com/TT-Wang/forge/blob/master/CONTRIBUTING.md
+- Changelog: https://github.com/TT-Wang/forge/blob/main/CHANGELOG.md
+- Security policy: https://github.com/TT-Wang/forge/blob/main/SECURITY.md
+- Contributing: https://github.com/TT-Wang/forge/blob/main/CONTRIBUTING.md
 - License: MIT

@@ -40,7 +40,7 @@ npm run format
 3. Make changes, add tests
 4. Run `npm run lint && npm test`
 5. Commit with a clear message
-6. Push and open a PR against `master`
+6. Push and open a PR against `main`
 
 ## Commit conventions
 

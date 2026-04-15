@@ -21,11 +21,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: forge-mcp-server/package-lock.json
       - name: Install deps
-        run: npm ci || npm install
+        run: npm install --no-audit --no-fund
       - name: ESLint
-        run: npx eslint . || true
-      - name: Prettier (check, advisory)
-        run: npx prettier --check . || true
+        run: npx eslint .
 
   test:
     runs-on: ubuntu-latest
@@ -40,7 +38,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: forge-mcp-server/package-lock.json
       - name: Install deps
-        run: npm ci || npm install
+        run: npm install --no-audit --no-fund
       - name: Run tests
         run: node --test tests/*.test.mjs
 
@@ -54,7 +52,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: forge-mcp-server/package-lock.json
       - name: Install deps
-        run: npm ci || npm install
+        run: npm install --no-audit --no-fund
       - name: Import smoke test (ensure index.mjs loads cleanly)
         run: node -e "import('./index.mjs').then(m => { if (!m.handleValidatePlan) { throw new Error('handleValidatePlan missing'); } console.log('ok'); });"
       - name: Validate plugin manifest JSON

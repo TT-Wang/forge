@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest minor release on `master` is the only actively supported version.
+The latest minor release on `main` is the only actively supported version.
 Older versions do not receive security fixes.
 
 ## Reporting a vulnerability
