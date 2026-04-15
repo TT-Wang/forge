@@ -5,14 +5,14 @@
     "url": "https://github.com/TT-Wang"
   },
   "metadata": {
-    "description": "TT-Wang's Claude Code plugins",
+    "description": "Claude Code plugins by TT-Wang",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "forge",
       "source": "./",
-      "description": "Structured planning, parallel execution, validation, retry, and memory for Claude Code",
+      "description": "Plan, execute, validate, retry, and learn across complex Claude Code tasks",
       "version": "0.4.0"
     }
   ]

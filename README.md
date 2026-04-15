@@ -5,7 +5,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)](https://nodejs.org/)
 [![forge MCP server](https://glama.ai/mcp/servers/TT-Wang/forge/badges/score.svg)](https://glama.ai/mcp/servers/TT-Wang/forge)
 
-Structured planning, parallel execution, and deep validation for Claude Code.
+Turn Claude Code into a structured delivery loop: plan the work, run modules in parallel, validate deeply, retry intelligently, and carry forward what worked.
 
 ## Install
 
@@ -14,96 +14,212 @@ claude plugin marketplace add TT-Wang/forge
 claude plugin install forge@tt-wang-plugins
 ```
 
-## What it does
+## The Pitch
 
-Forge turns a vague objective into structured, validated, parallel work. You say `/forge add JWT auth with refresh tokens` and it plans, executes in parallel worktrees, validates deeply, retries intelligently, and learns for next time.
+Forge is for the point where plain prompting stops being enough.
 
-- **Plans** — breaks tasks into a dependency graph of modules
-- **Executes** — parallel workers in isolated git worktrees
-- **Validates** — syntax checks, API contract verification, stagnation detection
-- **Retries** — debugger agent with root-cause analysis on failures
-- **Reviews** — correctness and security checks with contract verification
-- **Learns** — saves conventions and failure patterns to memory
-- **Resumes** — picks up where you left off after a crash
+If the task touches several files, needs coordination between modules, or needs proof that it actually works, Forge gives Claude Code a workflow instead of just another prompt:
 
-## Usage
+- break the work into modules
+- run what can be parallelized
+- validate each module hard
+- retry failures with debugger context
+- remember what worked for the next task
 
+You still use Claude Code. Forge just adds structure around the hard parts.
+
+## What You Get
+
+- **Structured planning**: breaks a feature into modules with dependencies and verification commands
+- **Parallel execution**: runs independent modules at the same time in isolated worktrees
+- **Deep validation**: checks files, commands, syntax, and cross-module API contracts
+- **Intelligent retry**: tracks attempts, detects stagnation, and escalates to a debugger agent
+- **Session resumability**: picks up incomplete work instead of starting from scratch
+- **Cross-session memory**: remembers conventions, failure patterns, and test commands
+- **Status visibility**: exposes progress in Claude output and a terminal status line
+
+## Why Not Just Use Claude Code Directly?
+
+For many tasks, you should.
+
+| Task shape | Plain Claude Code | Forge |
+|---|---|---|
+| One small edit | Better | Overkill |
+| Quick investigation | Better | Overkill |
+| Multi-file feature | Manual coordination required | Strong fit |
+| Parallelizable work | You manage it yourself | Built in |
+| Deep validation | You remember to run it | Part of the workflow |
+| Retry after failure | Manual retry and debugging | Tracked, guided, resumable |
+| Reusing patterns across sessions | Ad hoc | Built in memory |
+
+Forge is not trying to replace normal usage. It is for the tasks where orchestration matters.
+
+## Quick Start
+
+### Run
+
+```text
+/forge build an audit log for admin actions
 ```
-/forge add JWT authentication with refresh tokens
+
+### Check Progress
+
+```text
 /forge-status
+```
+
+### Re-check One Module
+
+```text
 /forge-validate m2
 ```
 
-**Use Forge for** multi-file features, tasks that need validation, ambitious changes. **Skip it for** quick edits or simple questions — just use Claude Code directly.
+## A Typical Session
 
-## How it works
+```text
+/forge add JWT auth with refresh tokens
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  /forge "add JWT auth with refresh tokens"                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-              ┌────────────────────────┐
-              │    Forge Orchestrator   │
-              │    skills/forge/SKILL   │
-              └─────┬──────────────────┘
-                    │
-    ┌───────────────┼───────────────┬───────────────┐
-    ▼               ▼               ▼               ▼
-┌────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-│Planner │   │ Worker   │   │ Reviewer │   │ Debugger │
-│        │   │ (×N      │   │          │   │          │
-│ Explore│   │ parallel)│   │ Security │   │ Root     │
-│ codebase   │          │   │ + API    │   │ cause    │
-│ → DAG  │   │ Isolated │   │ contract │   │ analysis │
-│ plan   │   │ worktree │   │ checks   │   │ + logs   │
-└────┬───┘   └────┬─────┘   └────┬─────┘   └────┬─────┘
-     │            │               │               │
-     └────────────┴───────┬───────┴───────────────┘
-                          │
-                          ▼
-              ┌────────────────────────┐
-              │     MCP Server         │
-              │     (Node.js, 7 tools) │
-              │                        │
-              │  validate              │
-              │  validate_plan         │
-              │  memory_recall/save    │
-              │  iteration_state       │
-              │  forge_logs            │
-              │  session_state         │
-              └───────────┬────────────┘
-                          │
-                          ▼
-              ┌────────────────────────┐
-              │   .forge/ (persistent) │
-              │                        │
-              │   plans/    memory/    │
-              │   iterations/  logs/   │
-              │   state/               │
-              └────────────────────────┘
+[forge] Phase 1: Planning...
+[forge] Proposed Plan: 4 modules, 2 parallel groups
+[forge] Proceed with this plan? (yes / modify / abort)
+
+[forge] Phase 2: Executing m1...
+[forge] Phase 2: Executing m2, m3 in parallel...
+[forge] ✓ m2: DONE — validated, score 1.0
+[forge] ✗ m3: FAILED — retrying with debugger
+[forge] ✓ m3: DONE — validated after retry
+
+[forge] ## Forge Complete
+[forge] 4/4 modules completed
 ```
 
-4 agents + 1 MCP server (7 tools) + 3 slash commands. All markdown and Node.js — no custom runtime.
+That is the experience Forge is aiming for: less manual steering, more visible progress, and fewer silent failures.
 
-## MCP Tools
+## Current Project Structure
 
-| Tool | What |
-|------|------|
-| `validate` | Syntax checks, API contracts, stagnation/velocity/oscillation analysis |
-| `validate_plan` | DAG cycle detection, file overlap warnings, schema validation |
-| `memory_recall` | Search project and global memory |
-| `memory_save` | Persist learned patterns with deduplication |
-| `iteration_state` | Track retry attempts per module |
-| `forge_logs` | Query structured JSONL logs by run, module, phase, severity |
-| `session_state` | Save/load session state for resumability |
+```text
+forge/
+├── .claude-plugin/
+│   ├── plugin.json
+│   └── marketplace.json
+├── .claude/
+│   ├── settings.json
+│   └── settings.local.json
+├── agents/
+│   ├── planner.md
+│   ├── worker.md
+│   ├── reviewer.md
+│   └── debugger.md
+├── skills/
+│   ├── forge/
+│   │   └── SKILL.md
+│   ├── forge-status/
+│   │   └── SKILL.md
+│   └── forge-validate/
+│       └── SKILL.md
+├── forge-mcp-server/
+│   ├── index.mjs
+│   ├── start.sh
+│   ├── package.json
+│   └── tests/
+├── statusline/
+│   └── forge-status.sh
+├── docs/
+│   ├── architecture.md
+│   ├── mcp-tools.md
+│   └── launch/
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── CLAUDE.md
+└── README.md
+```
+
+At runtime, Forge also creates a local `.forge/` directory in the working project to store plans, logs, memory, retry history, and resumable state.
+
+## The Main Pieces
+
+### Agents
+
+Forge ships with four focused agents:
+
+- **planner**: explores the codebase and proposes the module plan
+- **worker**: implements one module in an isolated worktree
+- **reviewer**: checks correctness, security, and contract mismatches
+- **debugger**: investigates failed modules and drives retry
+
+### Skills
+
+The user-facing commands are:
+
+- **`/forge`**: full orchestrator workflow
+- **`/forge-status`**: current plan, module progress, and learned patterns
+- **`/forge-validate`**: re-run validation for one module
+
+### MCP Server
+
+The bundled MCP server provides the shared runtime capabilities Forge needs:
+
+- `validate`
+- `validate_plan`
+- `memory_recall`
+- `memory_save`
+- `iteration_state`
+- `forge_logs`
+- `session_state`
+
+These tools let multiple agents coordinate without relying on loose conversational memory.
+
+### Status Line
+
+Forge can render live progress in your terminal:
+
+```text
+[forge] ████░░░░░░ 2/5 | VALIDATE | refresh endpoint | 3m19s | ~2m30s left
+```
+
+To use it:
+
+```bash
+claude statusline set "bash /path/to/forge/statusline/forge-status.sh"
+```
+
+## What Lives In Your Project
+
+Forge keeps its runtime state in a local `.forge/` directory inside the working project. That includes:
+
+- execution plans
+- retry history
+- learned patterns
+- structured logs
+- resumable session state
+
+This keeps the workflow inspectable instead of hiding everything behind opaque agent state.
+
+## Documentation
+
+- [Architecture](./docs/architecture.md) — orchestrator, agents, MCP server, and state flow
+- [MCP tools reference](./docs/mcp-tools.md) — input/output schemas and examples for all 7 tools
+- [Changelog](./CHANGELOG.md) — release notes
+- [Contributing](./CONTRIBUTING.md) — dev setup, tests, linting, and PR process
+- [Security](./SECURITY.md) — vulnerability reporting and security scope
+
+## Manual Installation
+
+If you do not want to install from the Claude Code marketplace, you can wire Forge manually:
+
+```bash
+git clone https://github.com/TT-Wang/forge.git /tmp/forge
+mkdir -p .claude/agents .claude/skills
+cp /tmp/forge/agents/*.md .claude/agents/
+cp -r /tmp/forge/skills/* .claude/skills/
+cp -r /tmp/forge/forge-mcp-server ./forge-mcp-server/
+cd forge-mcp-server && npm install && cd ..
+```
+
+Then wire the MCP server using the reference config in [`.claude/settings.json`](./.claude/settings.json).
 
 ## Development
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for dev setup, test commands, and
-the PR process. See [SECURITY.md](./SECURITY.md) for how to report
-vulnerabilities privately.
 
 ```bash
 git clone https://github.com/TT-Wang/forge.git
@@ -112,23 +228,10 @@ npm install
 npm test
 ```
 
-## Documentation
+## Works Great With
 
-- [Architecture](./docs/architecture.md) — orchestrator, agents, MCP server, state
-- [MCP tools reference](./docs/mcp-tools.md) — input/output schemas for all 7 tools
-- [Changelog](./CHANGELOG.md) — release notes
-
-## Works great with
-
-- **[memem](https://github.com/TT-Wang/memem)** — Persistent cross-session
-  memory for Claude Code. Forge + memem is the recommended pairing:
-  forge plans and executes, memem remembers what worked across runs.
-  Patterns forge saves via `memory_save` land in memem's recall index,
-  so next week's run starts with last week's lessons already loaded.
-
-## See Also
-
-- **[Vibereader](https://github.com/TT-Wang/vibereader)** — Curated tech news while Claude works
+- [memem](https://github.com/TT-Wang/memem) — persistent cross-session memory for Claude Code. Forge handles planning and execution; memem helps carry useful patterns across runs.
+- [Vibereader](https://github.com/TT-Wang/vibereader) — curated tech news while Claude works
 
 ## License
 
