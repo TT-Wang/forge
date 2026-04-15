@@ -1,14 +1,31 @@
 {
   "name": "forge",
-  "version": "0.4.0",
-  "description": "Structured planning, parallel execution, validation, intelligent retry, and cross-session memory for Claude Code",
+  "version": "0.5.0",
+  "description": "Turn a one-line objective into a validated dependency graph of modules, executed in parallel git worktrees with deep validation, intelligent retry, and cross-session memory — for Claude Code.",
   "author": {
     "name": "TT-Wang",
     "url": "https://github.com/TT-Wang"
   },
   "repository": "https://github.com/TT-Wang/forge",
   "license": "MIT",
-  "keywords": ["workflow", "planning", "validation", "retry", "memory", "parallel"],
+  "keywords": [
+    "claude-code",
+    "claude",
+    "workflow",
+    "orchestrator",
+    "planning",
+    "parallel",
+    "worktree",
+    "validation",
+    "api-contract",
+    "retry",
+    "debugger",
+    "mcp",
+    "agent",
+    "multi-file",
+    "refactor",
+    "memory"
+  ],
   "mcpServers": {
     "forge": {
       "command": "bash",

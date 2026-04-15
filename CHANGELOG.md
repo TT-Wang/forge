@@ -2,6 +2,94 @@
 
 All notable changes to forge.
 
+## [0.5.0] - 2026-04-15 — Launch
+
+### Fixed — critical plugin loader
+
+- **Plugin bootstrap replaced.** `plugin.json` previously pointed at
+  `forge-mcp-server/dist/index.mjs`, an esbuild bundle that had
+  drifted from source since around v0.2.x. Every user installing
+  forge from the marketplace was running pre-v0.4.0 code — none of
+  the v0.4.0 orchestration hardening or the subsequent code-review
+  fixes were reaching them. `dist/` is now deleted; `plugin.json`
+  points at `forge-mcp-server/start.sh`, which does a first-run
+  `npm install --omit=dev` into the plugin directory if
+  node_modules is missing, then execs `node index.mjs`. No more
+  bundle drift.
+
+### Fixed — code-review P0 + P1 findings
+
+A post-release code review surfaced three P0 bugs and seven P1
+quality issues. All fixed:
+
+- **Path traversal** — `handleForgeLogs`, `handleSessionState`, and
+  `handleIterationState` now reject `runId` values that don't match
+  `/^[\w.-]{1,128}$/`. Previously a crafted `runId` like
+  `../../etc/passwd` would escape `.forge/` on read or write.
+- **Shell injection** — `validate_plan`'s command existence check
+  now uses `execFileSync('which', [firstWord])` instead of
+  `execSync(\`which ${firstWord}\`)`. Verify commands starting with
+  `$(...)` can no longer execute arbitrary shell.
+- **Untested handler** — added tests for `handleValidate` covering
+  the happy path, nonexistent `cwd` escalation, and missing-file
+  detection. Previously the largest handler had zero test coverage.
+- **Per-run progress** — `writeProgressFile` now scans per-run
+  iteration subdirectories (`iterations/<runId>/<moduleId>.json`,
+  the v0.4.0 layout) with latest-run preference, falling back to
+  the legacy flat layout. Before this, the statusline showed
+  "pending" for every module even after validation passed.
+- **Server version drift** — MCP server advertised `0.2.0` while
+  `package.json` was at `0.4.0`. Constructor version bumped to
+  `0.5.0` in this release.
+- **Branch mismatch** — `CONTRIBUTING.md`, `SECURITY.md`, and
+  `llms.txt` all said `master`; CI was triggered on `main`. All
+  aligned on `main`.
+- **Strict lint** — ESLint was previously advisory (`|| true`) in
+  CI. Now blocking. Prettier check moved from CI to local/editor.
+- **Deterministic install** — `npm ci || npm install` fallback
+  removed; CI now uses plain `npm install --no-audit --no-fund`.
+- Dead code (`initRunLog`) removed; unused imports in tests
+  removed; ESLint config updated to recognize
+  `caughtErrorsIgnorePattern: "^_"`.
+
+### Added — OSS polish
+
+- **SECURITY.md** — private vulnerability reporting, scope,
+  defence-in-depth posture
+- **CONTRIBUTING.md** — dev setup, test/lint/PR process,
+  architecture notes
+- **docs/architecture.md** — full architecture walkthrough with
+  ASCII diagram and per-component responsibilities
+- **docs/mcp-tools.md** — input/output schemas and examples for all
+  7 MCP tools
+- **llms.txt** — LLM-discoverable metadata file at repo root
+- **docs/launch/** — launch-week materials (blog post, Show HN draft,
+  social thread) checked in for transparency and reuse
+- **README badges** — CI status, MIT license, Node ≥20
+- **.github/workflows/ci.yml** — blocking lint + `node --test`
+  matrix on Node 20/22 + import smoke test + plugin manifest JSON
+  validation
+- **.github/ISSUE_TEMPLATE/** + **pull_request_template.md** — issue
+  templates, PR checklist
+- **.github/dependabot.yml** — weekly npm + monthly github-actions
+  dependency updates
+- **forge-mcp-server/eslint.config.mjs** — ESLint flat config
+- **forge-mcp-server/tests/forge-mcp.test.mjs** — 21 tests covering
+  validate, validate_plan, memory, iteration_state (including the
+  v0.4.0 per-run scoping regression), session_state, forge_logs,
+  runId traversal guards, and import-time bootstrap
+- **Cross-link with [memem](https://github.com/TT-Wang/memem)** —
+  README and llms.txt both call out the recommended pairing
+
+### Changed
+
+- MCP server import is now re-entrant for tests: `index.mjs` exports
+  all handlers and only connects stdio when run as the main module.
+- `docs/architecture.md` corrected: the orchestrator (not the worker)
+  calls `validate` with `cwd: <worktreePath>` after a worker reports
+  DONE. Previously the doc contradicted `worker.md` and
+  `skills/forge/SKILL.md`.
+
 ## [0.4.0] - 2026-04-14
 
 ### Fixed — orchestration hardening
