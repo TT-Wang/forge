@@ -14,6 +14,8 @@ claude plugin marketplace add TT-Wang/forge
 claude plugin install forge@tt-wang-plugins
 ```
 
+First start may take a few seconds because Forge bootstraps its MCP server dependencies automatically.
+
 ## The Pitch
 
 Forge is for the point where plain prompting stops being enough.
