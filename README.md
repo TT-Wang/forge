@@ -117,9 +117,16 @@ npm test
 - [MCP tools reference](./docs/mcp-tools.md) — input/output schemas for all 7 tools
 - [Changelog](./CHANGELOG.md) — release notes
 
+## Works great with
+
+- **[memem](https://github.com/TT-Wang/memem)** — Persistent cross-session
+  memory for Claude Code. Forge + memem is the recommended pairing:
+  forge plans and executes, memem remembers what worked across runs.
+  Patterns forge saves via `memory_save` land in memem's recall index,
+  so next week's run starts with last week's lessons already loaded.
+
 ## See Also
 
-- **[memem](https://github.com/TT-Wang/memem)** — Persistent cross-session memory for Claude Code
 - **[Vibereader](https://github.com/TT-Wang/vibereader)** — Curated tech news while Claude works
 
 ## License

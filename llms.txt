@@ -59,3 +59,10 @@ claude plugin install forge@tt-wang-plugins
 - Security policy: https://github.com/TT-Wang/forge/blob/main/SECURITY.md
 - Contributing: https://github.com/TT-Wang/forge/blob/main/CONTRIBUTING.md
 - License: MIT
+
+## Companion project
+
+- **memem** — https://github.com/TT-Wang/memem — persistent cross-session
+  memory for Claude Code. Recommended pairing: forge plans + executes,
+  memem remembers. Forge's `memory_save` patterns are readable by memem's
+  recall index, so learnings compound across runs.
