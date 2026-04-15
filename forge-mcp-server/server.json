@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.TT-Wang/forge",
+  "description": "Structured planning, parallel execution in git worktrees, and deep validation for Claude Code. Turns a one-line objective into a validated DAG of modules executed by worker agents, with cross-module API contract validation and intelligent retry via a debugger agent.",
+  "repository": {
+    "url": "https://github.com/TT-Wang/forge",
+    "source": "github"
+  },
+  "version": "0.5.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@tt-wang/forge-mcp-server",
+      "version": "0.5.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

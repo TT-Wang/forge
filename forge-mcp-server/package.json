@@ -1,6 +1,7 @@
 {
-  "name": "forge-mcp-server",
+  "name": "@tt-wang/forge-mcp-server",
   "version": "0.5.0",
+  "mcpName": "io.github.TT-Wang/forge",
   "description": "MCP server for forge — structured planning, validation, iteration state, logs, and memory tools for Claude Code",
   "type": "module",
   "main": "index.mjs",
