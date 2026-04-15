@@ -1,0 +1,61 @@
+# forge
+
+> Forge is a Claude Code plugin that adds structured planning, parallel
+> execution in isolated git worktrees, deep validation with API contract
+> checks, intelligent retry via a debugger agent, and cross-session memory
+> for learned patterns. It turns a one-line objective into a validated
+> dependency graph of modules, each executed, verified, and reviewed before
+> being merged back.
+
+## Install
+
+```bash
+claude plugin marketplace add TT-Wang/forge
+claude plugin install forge@tt-wang-plugins
+```
+
+## Usage
+
+```
+/forge <objective>          # full workflow: plan → execute → validate → learn
+/forge-status               # show plan progress, iteration state, memory
+/forge-validate <module>    # run validation for a specific module
+```
+
+## Architecture
+
+- **Orchestrator skill** (`skills/forge/`) — top-level workflow
+- **Agents** (`agents/`) — planner, worker, reviewer, debugger
+- **MCP server** (`forge-mcp-server/`) — 7 tools: validate, validate_plan,
+  memory_recall, memory_save, iteration_state, forge_logs, session_state
+- **`.forge/` directory** — per-project state: plans, iterations, logs,
+  session snapshots, project + global memory
+
+## MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| `validate` | Run verify commands + contract checks against a worktree |
+| `validate_plan` | DAG cycle detection, file-overlap warnings, schema checks |
+| `memory_recall` | Search project + global memory |
+| `memory_save` | Persist learned patterns (dedup by category+pattern) |
+| `iteration_state` | Track per-run retry counts, scores, stagnation |
+| `forge_logs` | Query structured JSONL logs (run/module/phase/severity) |
+| `session_state` | Save/load orchestrator state for resumability |
+
+## Defaults worth knowing
+
+- Node.js ≥ 20, ESM-only, zero build step (`node index.mjs`)
+- `validate`'s `cwd` arg redirects checks to a worker's worktree
+- Iteration state is scoped per `runId` so module IDs don't collide across plans
+- stdio-only MCP transport (no network surface)
+- State writes are atomic (`tmp + rename`)
+
+## Links
+
+- Repo: https://github.com/TT-Wang/forge
+- Issues: https://github.com/TT-Wang/forge/issues
+- Changelog: https://github.com/TT-Wang/forge/blob/master/CHANGELOG.md
+- Security policy: https://github.com/TT-Wang/forge/blob/master/SECURITY.md
+- Contributing: https://github.com/TT-Wang/forge/blob/master/CONTRIBUTING.md
+- License: MIT

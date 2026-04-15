@@ -1286,7 +1286,25 @@ function errorResult(message) {
   };
 }
 
-// ─── Start server ──────────────────────────────────────────────────
+// ─── Exports (for tests) ───────────────────────────────────────────
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+export {
+  handleValidate,
+  handleValidatePlan,
+  handleMemoryRecall,
+  handleMemorySave,
+  handleIterationState,
+  handleForgeLogs,
+  handleSessionState,
+  textResult,
+  errorResult,
+};
+
+// ─── Start server ──────────────────────────────────────────────────
+// Only connect stdio when run as a script (not when imported by tests).
+
+const isMain = import.meta.url === `file://${process.argv[1]}`;
+if (isMain) {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

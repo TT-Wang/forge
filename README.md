@@ -1,5 +1,9 @@
 # Forge
 
+[![CI](https://github.com/TT-Wang/forge/actions/workflows/ci.yml/badge.svg)](https://github.com/TT-Wang/forge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)](https://nodejs.org/)
+
 Structured planning, parallel execution, and deep validation for Claude Code.
 
 ## Install
@@ -94,11 +98,30 @@ Forge turns a vague objective into structured, validated, parallel work. You say
 | `forge_logs` | Query structured JSONL logs by run, module, phase, severity |
 | `session_state` | Save/load session state for resumability |
 
+## Development
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for dev setup, test commands, and
+the PR process. See [SECURITY.md](./SECURITY.md) for how to report
+vulnerabilities privately.
+
+```bash
+git clone https://github.com/TT-Wang/forge.git
+cd forge/forge-mcp-server
+npm install
+npm test
+```
+
+## Documentation
+
+- [Architecture](./docs/architecture.md) — orchestrator, agents, MCP server, state
+- [MCP tools reference](./docs/mcp-tools.md) — input/output schemas for all 7 tools
+- [Changelog](./CHANGELOG.md) — release notes
+
 ## See Also
 
-- **[Cortex](https://github.com/TT-Wang/cortex-plugin)** — Persistent cross-session memory for Claude Code
+- **[memem](https://github.com/TT-Wang/memem)** — Persistent cross-session memory for Claude Code
 - **[Vibereader](https://github.com/TT-Wang/vibereader)** — Curated tech news while Claude works
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE)

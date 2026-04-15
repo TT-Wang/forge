@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+defaults:
+  run:
+    working-directory: forge-mcp-server
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: forge-mcp-server/package-lock.json
+      - name: Install deps
+        run: npm ci || npm install
+      - name: ESLint
+        run: npx eslint . || true
+      - name: Prettier (check, advisory)
+        run: npx prettier --check . || true
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: "npm"
+          cache-dependency-path: forge-mcp-server/package-lock.json
+      - name: Install deps
+        run: npm ci || npm install
+      - name: Run tests
+        run: node --test tests/*.test.mjs
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: forge-mcp-server/package-lock.json
+      - name: Install deps
+        run: npm ci || npm install
+      - name: Import smoke test (ensure index.mjs loads cleanly)
+        run: node -e "import('./index.mjs').then(m => { if (!m.handleValidatePlan) { throw new Error('handleValidatePlan missing'); } console.log('ok'); });"
+      - name: Validate plugin manifest JSON
+        working-directory: ${{ github.workspace }}
+        run: node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf-8'))"
