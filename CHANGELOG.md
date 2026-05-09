@@ -2,6 +2,65 @@
 
 All notable changes to forge.
 
+## [0.6.0] - 2026-05-09 — Agentic Design Patterns batch
+
+Four patterns from Antonio Gulli's *Agentic Design Patterns* (Springer 2025) applied
+after a focused audit of forge against the book's 21 patterns.
+
+### Added — F-1: Self-Consistency reviewer for Phase 4.5
+
+Phase 4.5 now spawns three reviewer agents in parallel, each with a distinct lens:
+- **Lens A** — cross-cutting bugs and field-name mismatches
+- **Lens B** — race conditions, concurrency, lazy state, TOCTOU
+- **Lens C** — backward-compat breaks, default-value drift, hardcoded paths
+
+Findings cited by ≥2 lenses become "must-fix" (block release); singletons go in an
+"advisory" bucket. All three reviewers spawn with `model: opus`. Cost: 3× a single
+Opus reviewer pass — intentional uplift for the release-blocking decision.
+
+Source: book pp. 277-278, 361-362.
+
+### Added — F-2 + F-3: Contractor planner schema + Trajectory eval (optional fields)
+
+Planner output schema extended with five OPTIONAL per-module fields:
+- `acceptance_criteria` — list of `{check, expected, blocking}` the reviewer scores against
+- `disallowed_changes` — file/glob patterns the worker must not modify (AUTO-BLOCK if violated)
+- `cost_budget` — `{max_tokens?, max_retries?}` soft guardrails
+- `success_evidence` — string describing what artifact proves completion
+- `expected_trajectory` — list of high-level steps; reviewer compares actual vs. expected
+
+All fields are OPTIONAL — existing plans validate unchanged. validate_plan accepts
+plans with or without these fields, rejects only when present-but-malformed.
+
+Source: book pp. 316-320.
+
+### Added — F-4: Pre-retry overseer
+
+A new `overseer` agent runs in Phase 4 BEFORE the debugger spawns. It classifies
+worker failures as `stuck` / `missing_context` / `blocked` and shapes the debugger's
+prompt accordingly. The orchestrator extracts a worker tool-call summary from the
+transcript and passes it inline (since native Edit/Read/Bash calls don't appear in
+forge_logs — only the 7 MCP tools do). For `blocked` classification, the orchestrator
+short-circuits the debugger entirely and escalates to the user.
+
+Real-time async overseer (watching a running worker's callgraph) is deferred — would
+require rearchitecting worker spawning.
+
+Source: book pp. 101-105 (SICA case study).
+
+### Changed
+
+- Phase 4.5 cost: 3× Opus reviewer pass (was 1× Opus). Documented in SKILL.md.
+- Aggregation summary print now distinguishes "RELEASE BLOCKED" (must-fix > 0) vs
+  "RELEASE CLEAR" (must-fix == 0).
+- Reviewer agent now evaluates 5 optional planner fields when present.
+
+### Stats
+
+- 51 tests pass (was 30 pre-v0.6.0)
+- Two new test files: `validate_plan.test.mjs` (21 tests), `iteration_state.test.mjs` (test coverage docs)
+- New agent file: `agents/overseer.md`
+
 ## [0.5.0] - 2026-04-15 — Launch
 
 ### Fixed — critical plugin loader
