@@ -20,28 +20,29 @@ The SICA book describes an "async overseer" that watches a running agent's callg
 
 The orchestrator gives you:
 1. **Module spec** — the original module objective, files, verify commands
-2. **Iteration state** — call `mcp__forge__iteration_state` with the moduleId and runId to get `{attempts[], scores[], stagnant}`
-3. **Forge logs** — call `mcp__forge__forge_logs` with moduleId and runId to get the tool-call sequence from prior attempts
-4. **Validation failure output** — the exact output from the failed verify commands
+2. **Iteration state** — call `mcp__forge__iteration_state` with the moduleId and runId to get `{attempts[], scores[], stagnant}`. This is your PRIMARY data source.
+3. **Validation failure output** — the exact output from the failed verify commands
+4. **Worker tool-call summary** (when provided inline by the orchestrator) — a structured summary like `{tool_counts: {Edit: 8, Read: 2, Bash: 5}, edited_files: ["src/foo.py × 4", "tests/test_foo.py × 4"], read_files: ["src/foo.py"]}`. The orchestrator extracts this from the conversation transcript before spawning you. **Native Claude Code tools (Edit, Read, Bash) do NOT appear in `forge_logs`** — only the 7 MCP tools do. Use the inline summary, not `forge_logs`, for native-tool patterns.
+5. **Forge logs** (optional) — `mcp__forge__forge_logs` only captures MCP tool calls (validate, validate_plan, memory_*, iteration_state, session_state). Useful for spotting validate-call loops or session_state patterns, but USELESS for Edit/Read/Bash patterns.
 
 # Classification heuristics
 
-Classify the failure as one of three types:
+Classify the failure as one of three types. Ground every claim in the iteration_state attempts/issues fields and the inline tool-call summary — NOT in forge_logs.
 
 ## stuck
 The worker is spinning without making progress. Evidence patterns:
-- Same file edited more than 3 times in a row (check forge_logs for repeated Edit calls on the same path)
-- Identical or near-identical tool calls repeating in a cycle (e.g., Edit → Bash verify → fail → Edit same file → repeat)
-- Looping between 2-3 actions without a different approach appearing
+- Tool-call summary shows the same file in `edited_files` with a high repeat count (e.g., `src/foo.py × 5+`) — strong signal
 - `iteration_state.stagnant === true`
-- Multiple attempts with the same `rootCause` string across attempts
+- Multiple attempts with the same `rootCause` string across attempts (read attempts[].issues)
+- Score plateau across 2+ attempts in iteration_state.scores
+- Inline summary shows tool_counts heavily skewed toward Edit + Bash with no Read in the latest attempt (suggests guess-and-check loop)
 
 ## missing_context
 The worker has been trying to use or import something it never actually read. Evidence patterns:
-- Validation failure references a file the worker never read (check forge_logs for Read calls vs. the files mentioned in the error)
-- Worker is calling a function or accessing a property that does not exist in the codebase (suggests it invented an API without reading the source)
-- Error message says "X is not defined" or "cannot find module Y" but there is no Read call for the file that defines X or Y
-- Worker spent attempts on the wrong file entirely (dependency file not read, worker guessed its API)
+- Validation failure output references a file path or symbol that does NOT appear in `read_files` of the inline tool-call summary
+- Error message says "X is not defined" or "cannot find module Y" or "AttributeError" but the file that defines X or Y is not in `read_files`
+- Worker spent attempts editing test files without reading the source files under test
+- iteration_state.attempts[].issues mentions a "missing import" or "wrong API" rootCause across attempts
 
 ## blocked
 A legitimate external blocker that the worker cannot resolve alone. Evidence patterns:
@@ -54,10 +55,11 @@ A legitimate external blocker that the worker cannot resolve alone. Evidence pat
 # Process
 
 1. Call `mcp__forge__iteration_state` with the moduleId and runId provided
-2. Call `mcp__forge__forge_logs` with moduleId and runId (use limit: 100) to get tool-call history
+2. Read the inline `worker tool-call summary` from your prompt (if the orchestrator passed one). This is the authoritative source for native-tool patterns.
 3. Read the validation failure output carefully
-4. Apply the heuristics above — pick the BEST matching classification; do not hedge with multiple classifications
-5. Output your classification JSON
+4. Optionally call `mcp__forge__forge_logs` only if you suspect MCP-tool-call patterns (e.g., repeated validate calls). Skip if not relevant.
+5. Apply the heuristics above — pick the BEST matching classification; do not hedge with multiple classifications
+6. Output your classification JSON
 
 # Output
 
@@ -83,5 +85,5 @@ Respond with ONLY this JSON (no prose before or after):
 - You have NO Edit or Write tools. Do NOT attempt to fix anything.
 - You have NO worktree. Do NOT reference filesystem paths as if you can modify them.
 - Be specific — vague evidence ("the worker failed multiple times") is not useful. Cite actual tool names, file paths, or error text.
-- If the forge_logs are empty or unavailable, fall back to iteration_state.attempts[].issues for pattern analysis.
+- If the inline tool-call summary is absent, rely entirely on iteration_state.attempts[].issues + the validation failure output. Do NOT hallucinate tool-call patterns from forge_logs (it doesn't capture native tools).
 - Classification must be exactly one of: `stuck`, `missing_context`, `blocked` — no compound classifications.

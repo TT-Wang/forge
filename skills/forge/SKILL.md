@@ -162,15 +162,36 @@ After each module passes review:
    - `recommendation: "ESCALATE"` → print `[forge] ⊘ mN: ESCALATED`, stop retrying, report to user
 
 ## Phase 4: Retry (max 3 attempts per module)
+
+**Note:** A real-time async overseer (watching a running worker's callgraph) is deferred — it would require rearchitecting worker spawning. The current overseer is **synchronous and pre-retry**: it runs after worker failure, before debugger spawn.
+
 1. Call `mcp__forge__iteration_state` with `runId` to get retry history scoped to this run
 2. Print: `[forge] 🔧 mN: Debug attempt {n}/3 — "{module title}"`
-3. **Spawn overseer first** (before the debugger): spawn Agent with type `overseer` (read-only, fast — Haiku-tier), passing:
+3. **Build the worker tool-call summary** (orchestrator step). Walk the recent conversation transcript for the worker's tool calls and assemble:
+   ```
+   {
+     "tool_counts": {"Edit": N, "Read": N, "Bash": N, ...},
+     "edited_files": ["path × count", ...],   // ordered by count desc
+     "read_files": ["path", ...],             // unique
+     "last_5_actions": ["ToolName(arg_summary)", ...]
+   }
+   ```
+   Native Edit/Read/Bash calls do NOT appear in `mcp__forge__forge_logs` (only the 7 MCP tools do), so the orchestrator must extract this summary from the transcript directly. This is the overseer's primary signal source.
+4. **Spawn overseer** (before the debugger): spawn Agent with type `overseer` (read-only, Haiku-tier), passing:
    - The module spec
-   - The moduleId and runId (so it can call iteration_state and forge_logs itself)
+   - The moduleId and runId (so it can call `mcp__forge__iteration_state` itself)
    - The full validation failure output
-   - Instruction: "Classify this failure as stuck/missing_context/blocked. Return only JSON."
+   - The **inline tool-call summary** built in step 3
+   - Instruction: "Classify this failure as stuck/missing_context/blocked. Use the inline tool-call summary for native-tool patterns. Return only JSON."
    Parse the overseer's JSON output: `{"classification": "stuck|missing_context|blocked", "evidence": "...", "suggested_unblock": "..."}`
-4. Spawn Agent with type `debugger`, include:
+5. **Short-circuit for `blocked`**: if `classification === "blocked"`, do NOT spawn the debugger. Print:
+   ```
+   [forge] ⊘ mN: BLOCKED (overseer) — escalating to user
+   [forge]   Evidence: {evidence}
+   [forge]   Suggested unblock: {suggested_unblock}
+   ```
+   Skip the module and surface the overseer output to the user. Do not retry.
+6. Otherwise spawn Agent with type `debugger`, include:
    - Original module spec
    - Validation failure output AND review issues (if any)
    - The actual source code of dependency files (not just specs)
@@ -192,8 +213,8 @@ After each module passes review:
      - `stuck` → "The overseer classified this as STUCK. The previous approach has been tried and failed. You MUST try a fundamentally different strategy — do not repeat the same edits."
      - `missing_context` → "The overseer classified this as MISSING_CONTEXT. Read the specific files identified in the evidence before making any changes."
      - `blocked` → "The overseer classified this as BLOCKED. This likely cannot be fixed by retrying. If you confirm the blocker, report BLOCKED to the orchestrator instead of retrying — the user must resolve it."
-5. After debugger completes, validate again (back to Phase 3)
-6. If 3 attempts exhausted or stagnation detected → print `[forge] ⊘ mN: GAVE UP after 3 attempts`, skip and report
+7. After debugger completes, validate again (back to Phase 3)
+8. If 3 attempts exhausted or stagnation detected → print `[forge] ⊘ mN: GAVE UP after 3 attempts`, skip and report
 
 ## Phase 4.5: Final release review — Self-Consistency (MANDATORY)
 After ALL modules in ALL tiers have passed per-module validation AND any retries have resolved (or been escalated), run a **Self-Consistency review** by spawning THREE reviewer agents IN PARALLEL (in a single message) — each with a distinct lens prompt — all receiving the same full cumulative diff (`git diff <base>..HEAD`) as context.
@@ -206,6 +227,7 @@ Use the lens templates defined in `agents/reviewer.md` under "## Self-Consistenc
 - The full `git diff <base>..HEAD` output as context
 - The lens-specific instruction prepended to the standard final-release-mode prompt
 - Instruction: "Return your findings as JSON matching the standard reviewer output schema."
+- **Model override:** spawn each reviewer with `model: opus` (passed as the Agent tool's `model` parameter) to deliver the intended quality uplift. The reviewer.md front-matter is `sonnet` (used by Phase 2b for cost efficiency); Phase 4.5 explicitly overrides to Opus for the final release-blocker decision.
 
 | Lens | Focus |
 |------|-------|
@@ -221,11 +243,11 @@ Use the lens templates defined in `agents/reviewer.md` under "## Self-Consistenc
 4. **Partition findings:**
    - **≥2 lenses citing the same finding → "must-fix"** (blocks release)
    - **1 lens only → "advisory"** (logged, surfaced to user, but does not block release)
-5. Print aggregation summary:
+5. Print aggregation summary. The "RELEASE BLOCKED" suffix only appears when must-fix count > 0:
    ```
    [forge] Phase 4.5 Self-Consistency: 3 lenses complete
-   [forge]   Must-fix (≥2 lenses):  N findings — RELEASE BLOCKED
-   [forge]   Advisory (1 lens):     M findings — logged, not blocking
+   [forge]   Must-fix (≥2 lenses):  {N} findings{N>0 ? " — RELEASE BLOCKED" : " — RELEASE CLEAR"}
+   [forge]   Advisory (1 lens):     {M} findings — logged, not blocking
    ```
 
 ### Outcomes
@@ -284,7 +306,7 @@ When spawning agents via the Agent tool, use these parameters:
 | worker | `forge:worker` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, NotebookEdit, mcp__forge__validate |
 | reviewer | `forge:reviewer` | — | Read, Glob, Grep, Bash, mcp__forge__validate |
 | debugger | `forge:debugger` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__iteration_state, mcp__forge__forge_logs |
-| overseer | `forge:overseer` (or read agents/overseer.md) | — (no isolation, read-only) | Read, Glob, Grep, Bash (read-only), mcp__forge__iteration_state, mcp__forge__forge_logs |
+| overseer | `forge:overseer` | — (no isolation, read-only) | Read, Glob, Grep, Bash (read-only), mcp__forge__iteration_state, mcp__forge__forge_logs |
 
 - Workers and debuggers are spawned with `isolation: "worktree"` by default to prevent parallel modules from interfering with each other.
 - Reviewers and planners run in the main worktree (read-only analysis).

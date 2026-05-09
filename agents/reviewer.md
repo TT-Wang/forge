@@ -64,6 +64,10 @@ Example: `[forge:reviewer] Reviewing m1: token generation...` or `[forge:reviewe
    - Mark the review as AUTO-BLOCK (passed=false, regardless of verify outcome).
    - Example: if `disallowed_changes` includes `"*.lock"` and the diff shows `package-lock.json` was modified, that is an AUTO-BLOCK.
 
+   **`success_evidence`**: If present, verify that the stated artifact actually exists in the worker's output, verify run, or diff. If the evidence is missing or doesn't match the description, emit a `warning`-severity finding. Example: evidence says "test output showing 5/5 pass" — confirm the verify output contains that pattern.
+
+   **`cost_budget`**: If present, check `iteration_state` for the module to see the actual `attempts` count and (if available) token usage. If `max_retries` was exceeded — but the module still completed — emit a `warning` noting the budget overrun. If `max_tokens` was exceeded, same. Budget overruns don't block, but they're signal for future planning.
+
 8. **Output review**:
 
 ```json
