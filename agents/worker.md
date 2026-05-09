@@ -42,9 +42,17 @@ Example: `[forge:worker] Implementing m2: auth middleware...`
   "filesChanged": ["list of files actually modified"],
   "verifyPassed": true,
   "concerns": "any issues or risks noticed (empty string if none)",
-  "summary": "one sentence describing what was done"
+  "summary": "one sentence describing what was done",
+  "toolCallSummary": {
+    "tool_counts": {"Edit": 8, "Read": 3, "Bash": 5},
+    "edited_files": ["src/foo.py × 4", "tests/test_foo.py × 4"],
+    "read_files": ["src/foo.py", "tests/conftest.py"],
+    "last_5_actions": ["Edit(src/foo.py)", "Bash(pytest)", "Edit(src/foo.py)", "Bash(pytest)", "Read(src/bar.py)"]
+  }
 }
 ```
+
+The `toolCallSummary` field is REQUIRED when status is `DONE_WITH_CONCERNS` or `BLOCKED` — the orchestrator's pre-retry overseer (Phase 4) reads it to classify failures as stuck/missing_context/blocked. It is OPTIONAL for clean DONE reports. Track your tool calls as you work and emit the summary at the end. If you don't track them, omit the field rather than guess.
 
 # Rules
 - Make MINIMAL changes. Don't refactor surrounding code.

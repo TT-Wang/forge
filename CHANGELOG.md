@@ -2,6 +2,32 @@
 
 All notable changes to forge.
 
+## [0.6.1] - 2026-05-09
+
+Patch release — Phase 4.5 final review caught one BLOCKER + three warnings on v0.6.0.
+
+### Fixed (BLOCKER)
+
+- **MCP server version drift regression** — `forge-mcp-server/index.mjs` Server
+  constructor still advertised `"0.5.0"` while every manifest was at `0.6.0`.
+  This is the same drift bug v0.5.0 explicitly fixed and shipped as a fix.
+  Bumped to `0.6.1` to match manifests.
+
+### Fixed (warnings)
+
+- **Phase 4 blocked short-circuit now persists state.** The orchestrator now calls
+  `mcp__forge__session_state` action=save when overseer classifies a failure as
+  `blocked`, so a session drop right after escalation doesn't lose the BLOCKED
+  status. Previously the only Phase 2-step-6 save path was bypassed.
+- **Tool-call summary sourcing clarified.** SKILL.md Phase 4 step 3 used to say
+  "Walk the conversation transcript", which isn't feasible — the orchestrator can
+  see Agent tool results, not sub-agent tool call history. Now sourced from the
+  worker's DONE report directly. `agents/worker.md` updated to require a
+  `toolCallSummary` field on `DONE_WITH_CONCERNS` / `BLOCKED` reports (optional
+  on clean DONE).
+- **CHANGELOG correction:** v0.6.0 stats said "was 30 pre-v0.6.0" — actual
+  baseline was 21 tests. v0.6.1 stats: 51 → still 51 (no new tests this patch).
+
 ## [0.6.0] - 2026-05-09 — Agentic Design Patterns batch
 
 Four patterns from Antonio Gulli's *Agentic Design Patterns* (Springer 2025) applied
@@ -57,8 +83,8 @@ Source: book pp. 101-105 (SICA case study).
 
 ### Stats
 
-- 51 tests pass (was 30 pre-v0.6.0)
-- Two new test files: `validate_plan.test.mjs` (21 tests), `iteration_state.test.mjs` (test coverage docs)
+- 51 tests pass (was 21 pre-v0.6.0)
+- Two new test files: `validate_plan.test.mjs` (21 tests), `iteration_state.test.mjs` (9 tests documenting overseer API compatibility)
 - New agent file: `agents/overseer.md`
 
 ## [0.5.0] - 2026-04-15 — Launch

@@ -167,7 +167,12 @@ After each module passes review:
 
 1. Call `mcp__forge__iteration_state` with `runId` to get retry history scoped to this run
 2. Print: `[forge] 🔧 mN: Debug attempt {n}/3 — "{module title}"`
-3. **Build the worker tool-call summary** (orchestrator step). Walk the recent conversation transcript for the worker's tool calls and assemble:
+3. **Build the worker tool-call summary** (orchestrator step). The orchestrator does NOT have direct access to a sub-agent's individual tool calls — the Agent tool result only surfaces the worker's text output. Source the summary in this priority order:
+   - **(a) Worker DONE report:** the worker's DONE report should include a `toolCallSummary` field (workers are instructed to emit this — see `agents/worker.md`). Use it as-is when present.
+   - **(b) Iteration state evidence:** if the worker didn't emit a summary, fall back to whatever signal `iteration_state.attempts[].issues` exposes about file edits and reads.
+   - **(c) Empty:** if neither is available, pass an empty/minimal summary. The overseer's heuristics handle this case (see `agents/overseer.md`) and rely on `iteration_state` + the validation failure output instead.
+
+   Expected summary shape when present:
    ```
    {
      "tool_counts": {"Edit": N, "Read": N, "Bash": N, ...},
@@ -176,7 +181,7 @@ After each module passes review:
      "last_5_actions": ["ToolName(arg_summary)", ...]
    }
    ```
-   Native Edit/Read/Bash calls do NOT appear in `mcp__forge__forge_logs` (only the 7 MCP tools do), so the orchestrator must extract this summary from the transcript directly. This is the overseer's primary signal source.
+   Native Edit/Read/Bash calls do NOT appear in `mcp__forge__forge_logs` (only the 7 MCP tools do).
 4. **Spawn overseer** (before the debugger): spawn Agent with type `overseer` (read-only, Haiku-tier), passing:
    - The module spec
    - The moduleId and runId (so it can call `mcp__forge__iteration_state` itself)
@@ -190,7 +195,7 @@ After each module passes review:
    [forge]   Evidence: {evidence}
    [forge]   Suggested unblock: {suggested_unblock}
    ```
-   Skip the module and surface the overseer output to the user. Do not retry.
+   Then call `mcp__forge__session_state` with `action: "save"` to persist the BLOCKED status (so a session drop right after escalation doesn't lose the state). Skip the module and surface the overseer output to the user. Do not retry.
 6. Otherwise spawn Agent with type `debugger`, include:
    - Original module spec
    - Validation failure output AND review issues (if any)

@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Turn Claude Code into a plan-execute-validate loop with parallel work, intelligent retry, and memory",
   "author": {
     "name": "TT-Wang",

@@ -74,7 +74,7 @@ for (const dir of ["plans", "memory", "iterations", "logs", "state"]) {
 }
 
 const server = new Server(
-  { name: "forge", version: "0.5.0" },
+  { name: "forge", version: "0.6.1" },
   { capabilities: { tools: {} } }
 );
 
