@@ -173,13 +173,47 @@ After each module passes review:
 4. After debugger completes, validate again (back to Phase 3)
 5. If 3 attempts exhausted or stagnation detected → print `[forge] ⊘ mN: GAVE UP after 3 attempts`, skip and report
 
-## Phase 4.5: Final release review (MANDATORY)
-After ALL modules in ALL tiers have passed per-module validation AND any retries have resolved (or been escalated), spawn ONE reviewer agent in **final release mode** with the full cumulative diff (`git diff <base>..HEAD`) as context. Instruction: *"You are in final release review mode. Read the full diff and look for cross-cutting bugs that per-module review can't see — field-name mismatches, default-value inconsistencies, hook stdin double-drains, lazy state races, transient-vs-permanent error handling, subprocess cold-start costs, ARG_MAX exposure, unbounded injection. Use the checklist in your prompt template."*
+## Phase 4.5: Final release review — Self-Consistency (MANDATORY)
+After ALL modules in ALL tiers have passed per-module validation AND any retries have resolved (or been escalated), run a **Self-Consistency review** by spawning THREE reviewer agents IN PARALLEL (in a single message) — each with a distinct lens prompt — all receiving the same full cumulative diff (`git diff <base>..HEAD`) as context.
 
-If the final reviewer returns error-severity findings, the release is BLOCKED. Options:
+**Cost note:** Phase 4.5 now costs 3× a single Opus reviewer pass. This is intentional — post-ship analysis showed 12 bugs missed across 2 sequential reviewer passes; parallel lenses with majority-vote dramatically improves catch rate.
+
+### Spawn 3 reviewers simultaneously (one message, 3 Agent calls)
+
+Use the lens templates defined in `agents/reviewer.md` under "## Self-Consistency lens templates". Each reviewer gets:
+- The full `git diff <base>..HEAD` output as context
+- The lens-specific instruction prepended to the standard final-release-mode prompt
+- Instruction: "Return your findings as JSON matching the standard reviewer output schema."
+
+| Lens | Focus |
+|------|-------|
+| **Lens A** | Cross-cutting bugs and field-name mismatches across files |
+| **Lens B** | Race conditions, concurrency, lazy state, TOCTOU windows |
+| **Lens C** | Backward-compat breaks, default-value drift, version drift, hardcoded paths that should be variables |
+
+### Aggregation (orchestrator does this inline after all 3 reviewers respond)
+
+1. Collect all findings from all 3 lens reviewers (each returns a JSON `issues` array).
+2. Normalize each finding to `(file, line, normalized_summary)`. Two findings are the same if they reference the same file AND their line numbers are within ±5 lines AND their descriptions refer to the same code element (same field name, function, or variable).
+3. Group findings by `(file, line±5)` proximity. Count how many distinct lenses cited each group.
+4. **Partition findings:**
+   - **≥2 lenses citing the same finding → "must-fix"** (blocks release)
+   - **1 lens only → "advisory"** (logged, surfaced to user, but does not block release)
+5. Print aggregation summary:
+   ```
+   [forge] Phase 4.5 Self-Consistency: 3 lenses complete
+   [forge]   Must-fix (≥2 lenses):  N findings — RELEASE BLOCKED
+   [forge]   Advisory (1 lens):     M findings — logged, not blocking
+   ```
+
+### Outcomes
+
+If there are any **must-fix** findings, the release is BLOCKED. Options:
 - Fix the findings inline (small diffs) and re-run Phase 4.5
 - Spawn a new worker for each finding as a mini module
-- Report BLOCKED to the user with the findings
+- Report BLOCKED to the user with the aggregated findings
+
+If all findings are **advisory only**, the release proceeds. Advisory findings are included in the Phase 5 summary so the user can decide whether to address them post-ship.
 
 **Do NOT skip Phase 4.5 just because per-module reviews were clean.** Per-module reviews miss ~80% of real bugs that only emerge at integration. This phase is non-negotiable.
 

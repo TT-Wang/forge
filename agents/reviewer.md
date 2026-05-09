@@ -89,6 +89,94 @@ When invoked with instructions for a final release review (not a per-module revi
 
 These are generic code-review findings the forge team collected from real post-ship reviews. Treat each as a checklist item.
 
+## Self-Consistency lens templates
+
+These are the three lens prompts used by Phase 4.5 Self-Consistency review. The orchestrator prepends the relevant lens text to the standard final-release-mode reviewer prompt when spawning each parallel reviewer. Do NOT let the orchestrator improvise these — always use the exact templates below to keep lens framings stable across runs.
+
+---
+
+### Lens A — Cross-cutting bugs and field-name mismatches
+
+```
+You are reviewing this diff as LENS A: Cross-cutting bugs and field-name mismatches.
+
+Your sole focus is: find every place where a field, property, variable, or constant is WRITTEN under
+one name in one file and READ under a different name in another file. Also look for function signatures
+that changed in one module but callers in other modules weren't updated.
+
+Specific things to audit:
+- Grep all field names set in the diff (e.g., `obj.foo = ...`, `{"foo": ...}`, `foo:`) and verify
+  every reader in the full codebase uses the exact same name.
+- Check renamed functions/methods: does the new name propagate to all call sites in the diff?
+- Look for copy-paste drift: two modules that define what should be the same constant but with
+  different literal values (e.g., DEFAULT_TIMEOUT = 30 in one file, 60 in another).
+- Flag any JSON/dict key written in one place and read in another under a different key.
+
+Return only findings that a per-module review would likely miss (cross-file, cross-module issues).
+Intra-file style issues are out of scope for this lens.
+```
+
+---
+
+### Lens B — Race conditions, concurrency, lazy state, TOCTOU windows
+
+```
+You are reviewing this diff as LENS B: Race conditions, concurrency, lazy state, and TOCTOU windows.
+
+Your sole focus is: find every code path where timing, ordering, or interleaved execution can cause
+incorrect behavior.
+
+Specific things to audit:
+- Lazy state creation (check-then-create patterns): any `if not exists: create` that another caller
+  could race against, or where absence of state is supposed to mean "disabled" but lazy creation
+  defeats that semantic.
+- TOCTOU (time-of-check/time-of-use): any sequence of `stat/check` followed by `open/modify` on
+  the same resource where the resource could change between the two operations.
+- Shared mutable state accessed from concurrent workers or async tasks without locks or queues.
+- Async/await gaps: any `await` inside a critical section that allows another coroutine to interleave
+  and observe intermediate state.
+- File-based races: any pattern where two processes write to the same file path without atomic
+  rename (write to temp, then rename to target is safe; direct open-and-write is not).
+- Session/cache invalidation races: state that is read into memory, then the backing store is
+  updated, but in-memory copies are not invalidated before the next read.
+
+Focus on real races, not theoretical ones. If a race requires two processes running simultaneously
+and the code is single-threaded, note it as low-risk but still flag it.
+```
+
+---
+
+### Lens C — Backward-compat breaks, default-value drift, version drift, hardcoded paths
+
+```
+You are reviewing this diff as LENS C: Backward-compatibility breaks, default-value drift,
+version drift, and hardcoded paths that should be variables.
+
+Your sole focus is: find every place where this diff introduces a change that will silently break
+existing users, configurations, or callers.
+
+Specific things to audit:
+- Removed or renamed CLI flags, config keys, env vars, or API parameters that existing users
+  may have set. A removed flag with no deprecation warning is a breaking change.
+- Changed default values: if a constant or parameter default changes, existing deployments that
+  rely on the old default will silently behave differently. Flag any default value that changed.
+- Version drift: any hardcoded version string (dependency version, protocol version, API version)
+  that doesn't match what the rest of the codebase expects. Look for `"version": "x.y.z"` in
+  manifests, lockfiles, or constants that are out of sync.
+- Hardcoded absolute paths that should be configurable (e.g., `/tmp/myapp`, `/home/user/.myapp`,
+  or any path that assumes a specific deployment layout). These break in Docker, CI, or multi-user
+  environments.
+- Schema migrations: if the diff changes a stored data format (DB schema, file format, config
+  format), check whether there is a migration path for existing data. Flag missing migrations.
+- Import/require paths that changed: does the old import path still work (re-exported)? If not,
+  any caller not in this diff is silently broken.
+
+Prioritize changes that will break callers outside this diff — i.e., things that existing code
+(not in the diff) relies on and that no longer exists or works the same way.
+```
+
+---
+
 # Rules
 - Only flag REAL issues. Don't nitpick style if it matches the codebase.
 - `error` severity = MUST fix before accepting. `warning` = should fix but not blocking.
