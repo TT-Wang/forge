@@ -164,14 +164,36 @@ After each module passes review:
 ## Phase 4: Retry (max 3 attempts per module)
 1. Call `mcp__forge__iteration_state` with `runId` to get retry history scoped to this run
 2. Print: `[forge] 🔧 mN: Debug attempt {n}/3 — "{module title}"`
-3. Spawn Agent with type `debugger`, include:
+3. **Spawn overseer first** (before the debugger): spawn Agent with type `overseer` (read-only, fast — Haiku-tier), passing:
+   - The module spec
+   - The moduleId and runId (so it can call iteration_state and forge_logs itself)
+   - The full validation failure output
+   - Instruction: "Classify this failure as stuck/missing_context/blocked. Return only JSON."
+   Parse the overseer's JSON output: `{"classification": "stuck|missing_context|blocked", "evidence": "...", "suggested_unblock": "..."}`
+4. Spawn Agent with type `debugger`, include:
    - Original module spec
    - Validation failure output AND review issues (if any)
    - The actual source code of dependency files (not just specs)
    - Prior attempt issues from iteration state
    - The current `runId`
-4. After debugger completes, validate again (back to Phase 3)
-5. If 3 attempts exhausted or stagnation detected → print `[forge] ⊘ mN: GAVE UP after 3 attempts`, skip and report
+   - **Overseer classification prepended to the prompt context:**
+     ```
+     ## Overseer classification
+     {classification}
+
+     ## Overseer evidence
+     {evidence}
+
+     ## Suggested unblock
+     {suggested_unblock}
+
+     ```
+   - Per-classification instruction:
+     - `stuck` → "The overseer classified this as STUCK. The previous approach has been tried and failed. You MUST try a fundamentally different strategy — do not repeat the same edits."
+     - `missing_context` → "The overseer classified this as MISSING_CONTEXT. Read the specific files identified in the evidence before making any changes."
+     - `blocked` → "The overseer classified this as BLOCKED. This likely cannot be fixed by retrying. If you confirm the blocker, report BLOCKED to the orchestrator instead of retrying — the user must resolve it."
+5. After debugger completes, validate again (back to Phase 3)
+6. If 3 attempts exhausted or stagnation detected → print `[forge] ⊘ mN: GAVE UP after 3 attempts`, skip and report
 
 ## Phase 4.5: Final release review — Self-Consistency (MANDATORY)
 After ALL modules in ALL tiers have passed per-module validation AND any retries have resolved (or been escalated), run a **Self-Consistency review** by spawning THREE reviewer agents IN PARALLEL (in a single message) — each with a distinct lens prompt — all receiving the same full cumulative diff (`git diff <base>..HEAD`) as context.
@@ -262,6 +284,7 @@ When spawning agents via the Agent tool, use these parameters:
 | worker | `forge:worker` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, NotebookEdit, mcp__forge__validate |
 | reviewer | `forge:reviewer` | — | Read, Glob, Grep, Bash, mcp__forge__validate |
 | debugger | `forge:debugger` | `worktree` | Read, Edit, Write, Glob, Grep, Bash, mcp__forge__validate, mcp__forge__iteration_state, mcp__forge__forge_logs |
+| overseer | `forge:overseer` (or read agents/overseer.md) | — (no isolation, read-only) | Read, Glob, Grep, Bash (read-only), mcp__forge__iteration_state, mcp__forge__forge_logs |
 
 - Workers and debuggers are spawned with `isolation: "worktree"` by default to prevent parallel modules from interfering with each other.
 - Reviewers and planners run in the main worktree (read-only analysis).
