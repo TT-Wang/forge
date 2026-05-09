@@ -50,11 +50,65 @@ Write the plan as JSON to `.forge/plans/{objective-slug}.json`:
       "files": ["src/path/to/file.ts"],
       "verify": ["npm test -- --grep 'auth'"],
       "doneWhen": "clear acceptance criteria",
-      "complexity": "simple|medium|complex"
+      "complexity": "simple|medium|complex",
+
+      // OPTIONAL fields — emit when they add value, omit when they don't:
+      "acceptance_criteria": [
+        { "check": "all tests pass", "expected": "5/5 green", "blocking": true },
+        { "check": "no new lint warnings", "expected": "exit code 0", "blocking": false }
+      ],
+      "disallowed_changes": ["src/db/migrations/*", "*.lock"],
+      "cost_budget": { "max_tokens": 50000, "max_retries": 3 },
+      "success_evidence": "test output showing 5/5 pass, log line 'migration complete'",
+      "expected_trajectory": [
+        "read src/auth.ts to understand existing JWT structure",
+        "edit src/auth.ts to add JWT validation middleware",
+        "edit src/auth.test.ts to add test cases",
+        "run pytest tests/test_auth.py to confirm green"
+      ]
     }
   ]
 }
 ```
+
+### Optional field guidance
+
+These fields are **OPTIONAL**. Omit them when they don't add value. Old plans without these fields continue to validate correctly.
+
+**`acceptance_criteria`** — List of explicit pass-criteria the reviewer scores against. Each entry:
+- `check`: string describing what is being checked
+- `expected`: string describing the expected outcome
+- `blocking`: boolean — if `true`, a failed criterion blocks acceptance; if `false`, it's advisory
+
+Emit `acceptance_criteria` for any non-trivial module (medium or complex complexity). It is one of the highest-value fields because it gives the reviewer concrete scoring targets rather than vague "doneWhen" text. Example:
+```json
+"acceptance_criteria": [
+  { "check": "validate_plan accepts plan with new fields", "expected": "valid=true, errors=[]", "blocking": true },
+  { "check": "backward-compat: old plan still valid", "expected": "valid=true", "blocking": true },
+  { "check": "planner.md documents all 5 fields", "expected": "grep matches", "blocking": false }
+]
+```
+
+**`expected_trajectory`** — List of high-level steps the worker is expected to take, in order. This is the second highest-value field — it lets the reviewer catch divergent approaches (e.g., worker took a completely different path that technically passed verify but violates the design intent). Use concise action descriptions:
+```json
+"expected_trajectory": [
+  "read forge-mcp-server/index.mjs validate_plan handler",
+  "read agents/planner.md",
+  "edit forge-mcp-server/index.mjs to add optional field validation",
+  "edit agents/planner.md to document new fields",
+  "run node --test tests/ to confirm pass"
+]
+```
+
+Emit `expected_trajectory` for any non-trivial module. If the module has a clear, non-obvious implementation path, this field prevents the worker from discovering an alternative approach that misses the design.
+
+**`disallowed_changes`** — List of file/glob patterns the worker MUST NOT modify. Emit this when certain files are owned by another module in the same tier, are auto-generated, or must be stable for backward-compat reasons. Example: `["src/db/migrations/*", "*.lock", "CHANGELOG.md"]`. The reviewer will AUTO-BLOCK if any disallowed path appears in the diff.
+
+**`cost_budget`** — Soft guardrails on resource usage. Emit when you know the module is simple and a high retry count signals the worker is stuck rather than making progress. Fields are optional:
+- `max_tokens` (positive integer): soft token budget warning threshold
+- `max_retries` (positive integer): max retry attempts before escalating to user
+
+**`success_evidence`** — A string describing what artifact proves completion. Emit when `doneWhen` is ambiguous or when a specific log line / output artifact is the ground truth. Example: `"test output showing 5/5 pass"`, `"log line 'db migration completed'"`, `"screenshot of feature rendered in browser"`.
 
 ## Phase 4: Validate Plan
 After writing the plan JSON, call mcp__forge__validate_plan to check for:

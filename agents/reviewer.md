@@ -46,7 +46,25 @@ Example: `[forge:reviewer] Reviewing m1: token generation...` or `[forge:reviewe
    - **Error handling**: Missing error cases? Swallowed exceptions?
    - **Incomplete work**: TODO comments, placeholder implementations, commented-out code
 
-5. **Output review**:
+7. **Optional field evaluation** — if the module plan includes any of these optional fields, evaluate them explicitly:
+
+   **`acceptance_criteria`**: If present, evaluate EACH criterion in the list. For every criterion:
+   - Check whether the worker's changes satisfy the `expected` outcome for the given `check`.
+   - If a criterion has `blocking: true` and is NOT satisfied, emit one `error`-severity finding per failed blocking criterion. These must be fixed before the module is accepted.
+   - If a criterion has `blocking: false` and is NOT satisfied, emit one `warning`-severity finding.
+   - Do NOT skip criteria — evaluate all of them, even if the verify commands passed.
+
+   **`expected_trajectory`**: If present, request the worker's actual tool-call sequence from `iteration_state` (if a `runId` is available) or from the worker's DONE report. Compare the actual sequence against the expected steps:
+   - Minor reordering or extra steps: acceptable, no flag needed.
+   - Big divergence (more than 50% of expected steps not matching the actual trajectory): AUTO-FLAG as a `warning`-severity finding, even if `verify` passed. Explain which steps were expected but not taken.
+   - Document the comparison in the review output so the planner can calibrate future trajectories.
+
+   **`disallowed_changes`**: If present, check the diff for any file paths matching the listed patterns. If ANY matching file was modified:
+   - Emit one `error`-severity finding per violated pattern.
+   - Mark the review as AUTO-BLOCK (passed=false, regardless of verify outcome).
+   - Example: if `disallowed_changes` includes `"*.lock"` and the diff shows `package-lock.json` was modified, that is an AUTO-BLOCK.
+
+8. **Output review**:
 
 ```json
 {

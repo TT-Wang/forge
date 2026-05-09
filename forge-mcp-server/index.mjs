@@ -1041,6 +1041,86 @@ function handleValidatePlan(args) {
     }
   }
 
+  // 1b. Optional field schema validation (F-2 + F-3 contractor fields)
+  // All 5 fields are optional — absent = valid. Present-but-malformed = error.
+  for (const mod of modules) {
+    const mId = mod.id || "?";
+
+    // acceptance_criteria: array of {check: string, expected: string, blocking: boolean}
+    if (mod.acceptance_criteria !== undefined) {
+      if (!Array.isArray(mod.acceptance_criteria)) {
+        errors.push({ type: "schema", message: `Module ${mId}: acceptance_criteria must be an array` });
+      } else {
+        mod.acceptance_criteria.forEach((item, idx) => {
+          if (typeof item !== "object" || item === null || Array.isArray(item)) {
+            errors.push({ type: "schema", message: `Module ${mId}: acceptance_criteria[${idx}] must be an object` });
+          } else {
+            if (typeof item.check !== "string") {
+              errors.push({ type: "schema", message: `Module ${mId}: acceptance_criteria[${idx}].check must be a string` });
+            }
+            if (typeof item.expected !== "string") {
+              errors.push({ type: "schema", message: `Module ${mId}: acceptance_criteria[${idx}].expected must be a string` });
+            }
+            if (typeof item.blocking !== "boolean") {
+              errors.push({ type: "schema", message: `Module ${mId}: acceptance_criteria[${idx}].blocking must be a boolean` });
+            }
+          }
+        });
+      }
+    }
+
+    // disallowed_changes: array of strings (file/glob patterns)
+    if (mod.disallowed_changes !== undefined) {
+      if (!Array.isArray(mod.disallowed_changes)) {
+        errors.push({ type: "schema", message: `Module ${mId}: disallowed_changes must be an array of strings` });
+      } else {
+        mod.disallowed_changes.forEach((item, idx) => {
+          if (typeof item !== "string") {
+            errors.push({ type: "schema", message: `Module ${mId}: disallowed_changes[${idx}] must be a string` });
+          }
+        });
+      }
+    }
+
+    // cost_budget: object with optional max_tokens and max_retries (positive integers)
+    if (mod.cost_budget !== undefined) {
+      if (typeof mod.cost_budget !== "object" || mod.cost_budget === null || Array.isArray(mod.cost_budget)) {
+        errors.push({ type: "schema", message: `Module ${mId}: cost_budget must be an object` });
+      } else {
+        if (mod.cost_budget.max_tokens !== undefined) {
+          if (!Number.isInteger(mod.cost_budget.max_tokens) || mod.cost_budget.max_tokens <= 0) {
+            errors.push({ type: "schema", message: `Module ${mId}: cost_budget.max_tokens must be a positive integer` });
+          }
+        }
+        if (mod.cost_budget.max_retries !== undefined) {
+          if (!Number.isInteger(mod.cost_budget.max_retries) || mod.cost_budget.max_retries <= 0) {
+            errors.push({ type: "schema", message: `Module ${mId}: cost_budget.max_retries must be a positive integer` });
+          }
+        }
+      }
+    }
+
+    // success_evidence: non-empty string
+    if (mod.success_evidence !== undefined) {
+      if (typeof mod.success_evidence !== "string" || mod.success_evidence.trim().length === 0) {
+        errors.push({ type: "schema", message: `Module ${mId}: success_evidence must be a non-empty string` });
+      }
+    }
+
+    // expected_trajectory: array of strings
+    if (mod.expected_trajectory !== undefined) {
+      if (!Array.isArray(mod.expected_trajectory)) {
+        errors.push({ type: "schema", message: `Module ${mId}: expected_trajectory must be an array of strings` });
+      } else {
+        mod.expected_trajectory.forEach((item, idx) => {
+          if (typeof item !== "string") {
+            errors.push({ type: "schema", message: `Module ${mId}: expected_trajectory[${idx}] must be a string` });
+          }
+        });
+      }
+    }
+  }
+
   // 2. DAG cycle detection — topological sort via Kahn's algorithm
   const moduleIds = new Set(modules.map((m) => m.id));
   const inDegree = {};
