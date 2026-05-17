@@ -7,6 +7,21 @@
 
 Turn Claude Code into a structured delivery loop: plan the work, run modules in parallel, validate deeply, retry intelligently, and carry forward what worked.
 
+
+## Why Forge
+
+Single-agent Claude Code drifts past ~5 steps. The failure mode isn't code quality — it's **silent state corruption**: parallel workers branching from stale HEAD, modules quietly clobbering each other's changes, "DONE" status that hides broken integration. Forge externalizes the **plan → execute → validate** loop so the same task that would silently break at 7 steps cleanly delivers at 30.
+
+**Core mechanic:**
+
+- **DAG plans, not linear chains** — workers run in parallel where dependencies allow
+- **Worktree isolation + auto-WIP commits between tiers** — every tier writes to disk before the next branches off (this exists because we shipped memem v0.10.0 once with this exact failure: 20 min of recovery work)
+- **Per-module verify commands & acceptance criteria** — defined at plan time so workers can't quietly lower the bar
+- **Multi-lens review** — a separate reviewer agent + 3× self-consistency catches cross-module bugs single-module reviewers miss
+- **Structured failure ledger** — failure modes captured as JSONL, recalled by pattern ID in the next plan
+
+**Track record:** shipped memem v1.7 → v1.8.3 (7 releases) in a single day, including a 9-file anti-recursion safety fix and a persistent slice daemon — with human in the loop only at yes/modify/abort gates.
+
 ## Install
 
 Copy-paste:
