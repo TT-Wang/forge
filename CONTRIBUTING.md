@@ -22,6 +22,23 @@ npm run test:watch              # watch mode
 node --test tests/validate.test.mjs   # single file
 ```
 
+## Release checklist (v0.7.0+)
+
+When bumping the forge version, update ALL of the following in the same commit:
+
+1. **`forge-mcp-server/package.json`** — `version` field. **This is the single source of truth** — the `Server` constructor reads it at module load via the `FORGE_VERSION` constant.
+2. **`.claude-plugin/plugin.json`** — top-level `version` field.
+3. **`.claude-plugin/marketplace.json`** — `plugins[0].version` field.
+4. **`CHANGELOG.md`** — new entry at the top with date.
+
+The `tests/version_consistency.test.mjs` suite enforces (1)+(2)+(3) lock-step at every commit — if any drift, CI fails. (4) is on you.
+
+Pre-flight grep before pushing a release:
+```bash
+grep -E '"version"|version =' forge-mcp-server/package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
+```
+All three should show the same version.
+
 ## Code style
 
 - `eslint` for linting (flat config, ESM)

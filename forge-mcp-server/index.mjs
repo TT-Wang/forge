@@ -24,9 +24,21 @@ import {
   renameSync,
 } from "fs";
 import { join, resolve, extname, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const CWD = resolve(process.env.FORGE_CWD || process.cwd());
 const FORGE_DIR = join(CWD, ".forge");
+
+// v0.7.0: single source of truth for version. Previously the Server constructor
+// version drifted from package.json across releases (v0.5.0, v0.6.0, v0.6.1
+// all caught Server-version-stale bugs). Reading from package.json eliminates
+// the class entirely. tests/version_consistency.test.mjs asserts this stays
+// in lock-step on every commit.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_JSON = JSON.parse(
+  readFileSync(join(__dirname, "package.json"), "utf-8")
+);
+const FORGE_VERSION = PACKAGE_JSON.version;
 const PROGRESS_FILE = "/tmp/forge-status.json";
 const PROGRESS_TMP = "/tmp/forge-status.tmp";
 let forgeStartedAt = null;
@@ -74,7 +86,7 @@ for (const dir of ["plans", "memory", "iterations", "logs", "state"]) {
 }
 
 const server = new Server(
-  { name: "forge", version: "0.6.1" },
+  { name: "forge", version: FORGE_VERSION },
   { capabilities: { tools: {} } }
 );
 
@@ -759,9 +771,17 @@ function handleValidate(args) {
       syntaxCmd = `node --check "${absPath}"`;
     } else if (ext === ".py") {
       syntaxCmd = `python3 -m py_compile "${absPath}"`;
-    } else if (ext === ".ts" || ext === ".tsx") {
-      syntaxCmd = `npx tsc --noEmit --allowJs --skipLibCheck "${absPath}"`;
     }
+    // v0.7.0: removed per-file tsc syntax check.
+    // `npx tsc --noEmit --allowJs --skipLibCheck <file>` runs standalone
+    // without tsconfig context, so any file that imports a project module
+    // (e.g., `import {x} from 'vite'`, `import React from 'react'`) fails
+    // unresolved-module errors even when the project-level `tsc --noEmit`
+    // is clean. Result: per-module score gets pulled down to ~0.83 with
+    // RETRY_WITH_DEBUGGER triggered on a tool artifact, not a real bug.
+    // The plan's own `verify` commands should include a project-level
+    // type-check (e.g., `cd <pkg> && ./node_modules/.bin/tsc --noEmit`) —
+    // that's authoritative and runs with full tsconfig context.
 
     if (syntaxCmd) {
       try {
@@ -891,15 +911,38 @@ function handleValidate(args) {
         output: truncate(output, 3000),
       });
     } catch (e) {
-      allPassed = false;
-      results.push({
-        type: "command",
-        command: cmd,
-        passed: false,
-        output: truncate(e.stdout || "", 1500),
-        error: truncate(e.stderr || e.message || "", 1500),
-        exitCode: e.status,
-      });
+      // v0.7.0: `grep` (and `grep -c`) exits 1 when there are no matches.
+      // For plans that use `grep -c PATTERN FILE` as a "must be zero" assertion
+      // (the canonical way to assert no references to a deleted symbol),
+      // exit-1 with numeric-0 stdout IS the desired success signal. Without
+      // this special-case, the score drops 1.0→0.93 and RETRY_WITH_DEBUGGER
+      // fires on a tool-artifact, not a real bug. Recurred 2× in memem v2.1.0
+      // (m5 + m10) and would recur on every "verify nothing references X"
+      // command. Note: plans that want the opposite intent ("grep -c must
+      // find ≥1 match") should use `grep -q ... && echo found` instead.
+      const grepZeroMatch =
+        e.status === 1 &&
+        /^\s*(grep|!\s*grep)\b/.test(cmd) &&
+        /^\s*0\s*$/.test(String(e.stdout || ""));
+      if (grepZeroMatch) {
+        results.push({
+          type: "command",
+          command: cmd,
+          passed: true,
+          output: String(e.stdout || "").trim(),
+          note: "grep exited 1 with zero matches — treating as passing per v0.7.0 convention",
+        });
+      } else {
+        allPassed = false;
+        results.push({
+          type: "command",
+          command: cmd,
+          passed: false,
+          output: truncate(e.stdout || "", 1500),
+          error: truncate(e.stderr || e.message || "", 1500),
+          exitCode: e.status,
+        });
+      }
     }
   }
 

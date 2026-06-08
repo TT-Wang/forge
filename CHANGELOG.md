@@ -2,6 +2,39 @@
 
 All notable changes to forge.
 
+## [0.7.0] - 2026-06-08
+
+Failure-pattern-driven release. Audited recurring failures across the last ~15 forge runs (memem v1.4 through v2.1.0, loom m1-m4, demand-dog, text-editor-proto) and shipped fixes for the highest-impact recurrence patterns.
+
+### Fixed (orchestrator — skills/forge/SKILL.md)
+
+- **Stale-base bug** — workers spawned with `isolation: "worktree"` for tier ≥1 can branch from `git merge-base HEAD master` instead of current HEAD, missing prior tier's WIP commit. Confirmed in memem v1.5.0 m1, v2.0.0 m8, v2.0.0 triage worker — 3 separate recurrences. Fix: orchestrator now does a pre-spawn worktree rebase check (Phase 2 step 1a) and force-rebases when stale.
+- **Silent worker death** — forge:worker Agent calls can hang or exit without DONE/BLOCKED, leaving orchestrator waiting forever. Confirmed in memem v2.0.0 m8 + triage worker. Fix: Phase 2 step 1b adds watchdog convention — poll worktree mtime every 2-3 min; if static for 5+ min AND no Agent result, classify as DEAD and surface to user.
+- **Post-DONE worktree merge inconsistency** — workers' worktree changes sometimes auto-merged, sometimes not (m5/m6 vs m2/m4 in memem v1.4.0). Fix: Phase 2 step 3a now requires orchestrator to always check `git -C <worktreePath> diff` and apply patches explicitly.
+- **Phase 4.5 single-lens critical promotion** — strict ≥2-lens rule missed memem v2.1.0 A1 (mine_delta nested-schema mismatch) — only Lens A read the actual transcript file; tests all passed; would have shipped a silently nonfunctional miner. Fix: Phase 4.5 aggregation now also promotes single-lens findings with severity=error AND category in {silent-failure, contract-mismatch, schema-drift} to must-fix.
+
+### Fixed (validate MCP tool — forge-mcp-server/index.mjs)
+
+- **`grep -c` exit-1 false-positive** — `grep -c PATTERN FILE` outputs `0` (desired, no matches) but exits 1, which validate treated as failure. Score 1.0 → 0.93 → RETRY_WITH_DEBUGGER on a tool-artifact. Recurred 2× in memem v2.1.0 (m5 + m10). Fix: detect `grep -c` with exit code 1 and numeric-0 stdout, treat as passing with note.
+- **Per-file `tsc --noEmit` syntax-check removed** — running `npx tsc --noEmit --allowJs --skipLibCheck <file>` standalone has no tsconfig context, so any TS file importing a project module fails unresolved-module errors even when project-level type-check is clean. Confirmed in loom-m1. Fix: removed the .ts/.tsx case from per-file syntax check. Plans should use a project-level type-check in their `verify` commands.
+
+### Added (planner — agents/planner.md)
+
+- **Delete-X blast radius pre-check** — for every file slated for deletion, grep importers and either expand the module's scope OR add a tier-0 const-inline module. Prevents memem v2.1.0 m5's mid-execution scope expansion (specced 2 files, needed 5).
+- **Subprocess constant import enforcement** — when adding a subprocess call to a CLI/API the codebase already uses, force-import existing timeout/auth/retry constants. Prevents memem v1.7 m3's silent timeout drift.
+- **Real-fixture requirement for parsers** — parser/extractor modules must include at least one test fixture sourced from real production data, not synthesized. Prevents memem v2.1.0 A1 (mine_delta schema mismatch).
+
+### Added (release process)
+
+- **`FORGE_VERSION` constant + single-source-of-truth** — Server constructor version now reads from `package.json` at module load. Server-version drift had been independently re-introduced in v0.5.0, v0.6.0, and v0.6.1 — three regressions of the same class. This change eliminates the class entirely.
+- **`tests/version_consistency.test.mjs`** — asserts Server constructor uses `FORGE_VERSION`, the constant is derived from `PACKAGE_JSON.version`, and `.claude-plugin/{plugin,marketplace}.json` versions lock-step with `package.json`. Drift now fails CI, not production.
+- **Release checklist** added to CONTRIBUTING.md — explicit 4-manifest bump list with pre-flight grep.
+
+### Tests
+
+- 53 passing (was 51) — added 2 version-consistency tests
+- All pre-existing tests still green
+
 ## [0.6.1] - 2026-05-09
 
 Patch release — Phase 4.5 final review caught one BLOCKER + three warnings on v0.6.0.

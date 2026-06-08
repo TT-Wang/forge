@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Turn Claude Code into a plan-execute-validate loop with parallel work, intelligent retry, and memory",
   "author": {
     "name": "TT-Wang",
@@ -29,7 +29,9 @@
   "mcpServers": {
     "forge": {
       "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/forge-mcp-server/start.sh"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/forge-mcp-server/start.sh"
+      ],
       "env": {}
     }
   }

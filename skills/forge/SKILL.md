@@ -126,6 +126,8 @@ After each batch of parallel modules completes, print a progress summary:
 
 For each module:
 1. **Gather dependency source code**: Before spawning the worker, read the actual source code of all files produced by completed dependency modules. Include this source code verbatim in the worker prompt under a "## Dependency Source Code" section. This ensures the worker builds against REAL code, not just API specs.
+1a. **Pre-spawn worktree rebase check (v0.7.0)**: When spawning a worker with `isolation: "worktree"` for any tier ≥ 1, the worktree may branch from `git merge-base HEAD master` instead of current HEAD. If cherry-picks happened (Tier 0 work landed into main via cherry-pick), the new worktree's base will be STALE — the worker won't see prior tier files. Before letting the worker run: run `git -C <worktreePath> rev-parse HEAD` and compare to `git rev-parse HEAD` in main. If they differ AND main is ahead, run `git -C <worktreePath> rebase $(git rev-parse HEAD)` to bring the worktree up to date. Without this check, workers report "had to copy dependency from master" or silently miss prior-tier files (memem v1.5.0 m1, v2.0.0 m8, v2.0.0 triage worker — 3 confirmed recurrences). Lite-mode runs skip this check (no worktree).
+1b. **Silent-worker-death watchdog (v0.7.0)**: forge:worker Agent calls can hang or exit without emitting DONE/BLOCKED — the orchestrator sees no result and waits forever. Mitigation: after spawning the worker, set a soft deadline = `module.expected_minutes * 3` or 15 min default. While waiting, every 2-3 min run `stat -c %Y <worktreePath>/* 2>/dev/null | sort -rn | head -1` and compare to a moving high-water-mark. If worktree mtime hasn't advanced for 5+ min AND no DONE returned, classify as DEAD: print `[forge] ⊘ mN: WORKER DEAD (no progress 5+ min)`, surface to user, mark BLOCKED. Confirmed recurrences: memem v2.0.0 m8 silently completed/hung; v2.0.0 triage worker died silently.
 2. Spawn Agent with type `worker`, passing:
    - The module spec
    - The dependency source code (full file contents)
@@ -133,6 +135,7 @@ For each module:
    - A note: "You MUST match the actual APIs, property names, and calling conventions in the dependency code above. Do not assume — read and conform."
    - A note: "Do NOT call `mcp__forge__validate` yourself — the orchestrator runs validation after your worktree merges back into main. Self-validation was historically broken because the validator had a fixed CWD that couldn't see your worktree (fixed in v0.4.0 via the `cwd` parameter, but the convention is still: orchestrator validates, not worker)."
 3. Parse the worker's JSON output (look for `worktreePath` in the result for post-merge validation routing).
+3a. **Post-DONE worktree diff-and-apply (v0.7.0)**: When the worker reports DONE with a `worktreePath`, the worktree changes are NOT always automatically merged into main — m5/m6 in memem v1.4.0 left changes uncommitted in their worktrees while m2/m4 auto-merged. Convention: ALWAYS check `git -C <worktreePath> diff` and `git -C <worktreePath> diff --staged`; if either has content, apply the patch to main (cherry-pick the worker's commit if it made one, OR copy modified files explicitly via rsync). Do not trust "auto-merge happened" — verify by listing the worker's claimed `filesChanged` and confirming each one exists in main with the expected diff.
 4. If status is DONE: print ✓ status, proceed to review (Phase 2b), then validation
 5. If status is BLOCKED: print ⊘ status, log it, skip to next module, continue
 6. After each module completes or is skipped, call mcp__forge__session_state with action=save to persist progress.
@@ -247,7 +250,8 @@ Use the lens templates defined in `agents/reviewer.md` under "## Self-Consistenc
 3. Group findings by `(file, line±5)` proximity. Count how many distinct lenses cited each group.
 4. **Partition findings:**
    - **≥2 lenses citing the same finding → "must-fix"** (blocks release)
-   - **1 lens only → "advisory"** (logged, surfaced to user, but does not block release)
+   - **Single-lens with severity=error AND category in {silent-failure, contract-mismatch, schema-drift, silent production failure} → "must-fix" (v0.7.0)**. Rationale: the strict ≥2-lens rule misses cases where only one lens looks at the right artifact. Confirmed example: memem v2.1.0 A1 (mine_delta nested-schema mismatch) — only Lens A read the actual transcript file; tests all passed; would have shipped a silently nonfunctional miner under strict ≥2-lens. A single Opus reviewer flagging "silent failure" with concrete file:line evidence is high enough signal to block.
+   - **1 lens only, all other categories → "advisory"** (logged, surfaced to user, but does not block release)
 5. Print aggregation summary. The "RELEASE BLOCKED" suffix only appears when must-fix count > 0:
    ```
    [forge] Phase 4.5 Self-Consistency: 3 lenses complete
