@@ -2,6 +2,12 @@
 
 All notable changes to forge.
 
+## [Unreleased]
+
+### Fixed (validate MCP tool — forge-mcp-server/index.mjs)
+
+- **Contract checks reported false `missing` exports for TypeScript types** ([#26](https://github.com/TT-Wang/forge/issues/26), reported by @mattabate) — `export interface`, `export type`, `export enum`, `export const enum`, `export abstract class`, `export namespace` and `export declare ...` were never added to the exported set, so a correct module scored low and got RETRY_WITH_DEBUGGER/ESCALATE. Fix: exporter regex now covers those forms; `type` modifiers are stripped on both sides (`import type { A }`, `import { type A }`, `export type { A }`, `export { type A }`); `import Default, { a }` is recognized; empty specifiers from trailing commas are ignored.
+
 ## [0.7.0] - 2026-06-08
 
 Failure-pattern-driven release. Audited recurring failures across the last ~15 forge runs (memem v1.4 through v2.1.0, loom m1-m4, demand-dog, text-editor-proto) and shipped fixes for the highest-impact recurrence patterns.

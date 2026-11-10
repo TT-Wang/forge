@@ -368,6 +368,62 @@ test("validate: missing file flagged as file_check failure", () => {
   );
 });
 
+// ─── validate: contract checks (issue #26) ─────────────────────────
+
+function runContractCheck(name, exporterSrc, importerSrc) {
+  const dir = join(TMP_ROOT, `contract-${name}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "types.ts"), exporterSrc);
+  writeFileSync(join(dir, "app.ts"), importerSrc);
+  const out = parseJsonResult(
+    handleValidate({
+      moduleId: `contract-${name}`,
+      files: [],
+      commands: [],
+      cwd: dir,
+      contractChecks: [{ exporter: "types.ts", importer: "app.ts" }],
+      runId: `test-contract-${name}`,
+    })
+  );
+  return out.results.find((r) => r.type === "contract_check");
+}
+
+test("contract check recognizes TS interface/type/enum/abstract class exports", () => {
+  const r = runContractCheck(
+    "ts-decls",
+    [
+      "export interface User { id: string }",
+      "export type Id = string;",
+      "export enum Role { Admin }",
+      "export const enum Flag { On }",
+      "export abstract class Base {}",
+      "export declare function ext(): void;",
+      "export namespace NS {}",
+    ].join("\n"),
+    "import { User, Id, Role, Flag, Base, ext, NS } from './types';\n"
+  );
+  assert.equal(r.passed, true, `missing: ${JSON.stringify(r.missing)}`);
+});
+
+test("contract check strips `type` modifiers on both sides", () => {
+  const r = runContractCheck(
+    "type-modifiers",
+    "interface A {}\ninterface B {}\nexport type { A };\nexport { type B as Bee };\n",
+    "import type { A } from './types';\nimport { type Bee as B2, } from './types';\n"
+  );
+  assert.equal(r.passed, true, `missing: ${JSON.stringify(r.missing)}`);
+});
+
+test("contract check still reports genuinely missing exports", () => {
+  const r = runContractCheck(
+    "still-missing",
+    "export interface User {}\n",
+    "import { User, Admin } from './types';\n"
+  );
+  assert.equal(r.passed, false);
+  assert.deepEqual(r.missing, ["Admin"]);
+});
+
 // ─── P0 regression: runId path-traversal guards ────────────────────
 
 test("session_state rejects runId with traversal characters", () => {
