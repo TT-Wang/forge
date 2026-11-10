@@ -827,16 +827,20 @@ function handleValidate(args) {
 
     // Extract exported names (JS/TS)
     const exportedNames = new Set();
-    // Named exports: export function foo, export const foo, export class foo, export { foo, bar }
-    const namedExportRe = /export\s+(?:function|const|let|var|class|async\s+function)\s+(\w+)/g;
+    // Named exports: export function foo, export const foo, export class foo, plus
+    // TS declarations (interface, type, enum, const enum, abstract class, namespace)
+    // and `export declare ...` forms.
+    const namedExportRe =
+      /export\s+(?:declare\s+)?(?:async\s+function\*?|function\*?|const\s+enum|const|let|var|abstract\s+class|class|interface|type|enum|namespace)\s+(\w+)/g;
     let m;
     while ((m = namedExportRe.exec(exporterSrc)) !== null) exportedNames.add(m[1]);
-    // export { foo, bar, baz as qux }
-    const bracketExportRe = /export\s*\{([^}]+)\}/g;
+    // export { foo, bar, baz as qux }, export type { Foo }, export { type Foo }
+    const bracketExportRe = /export\s*(?:type\s*)?\{([^}]+)\}/g;
     while ((m = bracketExportRe.exec(exporterSrc)) !== null) {
       m[1].split(",").forEach((s) => {
-        const parts = s.trim().split(/\s+as\s+/);
-        exportedNames.add(parts[parts.length - 1].trim());
+        const parts = stripTypeModifier(s).split(/\s+as\s+/);
+        const name = parts[parts.length - 1].trim();
+        if (name) exportedNames.add(name);
       });
     }
     // export default
@@ -849,14 +853,16 @@ function handleValidate(args) {
     const importedNames = new Set();
     const exporterBasename = check.exporter.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
     // import { foo, bar } from './exporter'
+    // also: import type { Foo }, import { type Foo }, import Default, { foo }
     const importRe = new RegExp(
-      `import\\s*\\{([^}]+)\\}\\s*from\\s*['"][^'"]*${escapeRegex(exporterBasename)}['"]`,
+      `import\\s*(?:type\\s+)?(?:\\w+\\s*,\\s*)?\\{([^}]+)\\}\\s*from\\s*['"][^'"]*${escapeRegex(exporterBasename)}['"]`,
       "g"
     );
     while ((m = importRe.exec(importerSrc)) !== null) {
       m[1].split(",").forEach((s) => {
-        const parts = s.trim().split(/\s+as\s+/);
-        importedNames.add(parts[0].trim());
+        const parts = stripTypeModifier(s).split(/\s+as\s+/);
+        const name = parts[0].trim();
+        if (name) importedNames.add(name);
       });
     }
     // require('./exporter').foo or destructured
@@ -1749,6 +1755,11 @@ function truncate(str, maxLen) {
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// `type User` / `type User as U` inside an import/export specifier list → `User` / `User as U`
+function stripTypeModifier(specifier) {
+  return specifier.trim().replace(/^type\s+(?!as\b)/, "");
 }
 
 function summarizeArgs(args) {
